@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getContainer } from "../../container";
+import { describeBlobCredentials } from "../../outbound/store/blob.storage";
 import { BusinessException } from "../../shared/exceptions/business.exception";
 import {
     TechnicalException,
@@ -37,6 +38,10 @@ async function readBody(request: NextRequest): Promise<Pick<ApiRequest, "body" |
 export async function handleApiRequest(request: NextRequest, pathSegments: string[]): Promise<Response> {
     const path = "/" + pathSegments.map(encodeURIComponent).join("/");
     try {
+        if (request.method === "GET" && path === "/health") {
+            return await healthCheck();
+        }
+
         const matched = getRouter().match(request.method, path);
         if (!matched) {
             return json({ message: `Cannot ${request.method} ${path}` }, 404);
@@ -94,4 +99,24 @@ async function toErrorResponse(err: unknown): Promise<Response> {
 
     console.error("Unexpected error:", err);
     return json({ message: "An unexpected error occurred." }, 500);
+}
+
+/**
+ * GET /api/health: reports which storage this deployment uses (never secret values)
+ * and whether the data file can be read, so storage problems are visible at a glance.
+ */
+async function healthCheck(): Promise<Response> {
+    const { store } = getContainer();
+    const storage = store.isRemote
+        ? { mode: "vercel-blob", credentials: describeBlobCredentials() }
+        : process.env.VERCEL
+          ? { mode: "temporary", warning: "No Vercel Blob store connected: data is lost when the instance restarts." }
+          : { mode: "local-file" };
+    try {
+        await store.sync();
+        return json({ status: "ok", storage });
+    } catch (err) {
+        console.error("[health] storage check failed:", err);
+        return json({ status: "error", storage, error: err instanceof Error ? err.message : String(err) }, 503);
+    }
 }
