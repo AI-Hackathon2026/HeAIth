@@ -76,7 +76,7 @@ The app reads a single variable from `.env`:
 |---|---|
 | `GEMINI_API_KEY` | Google Gemini key for chat and routine generation. Without it, those endpoints return 503 and everything else keeps working. |
 
-No AWS, database, Redis, email or OAuth settings are needed. Login tokens are signed with a built-in secret. Access tokens last 1 hour and refresh tokens 7 days.
+On Vercel, connecting a Blob store also adds `BLOB_READ_WRITE_TOKEN` automatically (see Deploying to Vercel); you never set it by hand. No AWS, database, Redis, email or OAuth settings are needed. Login tokens are signed with a built-in secret. Access tokens last 1 hour and refresh tokens 7 days.
 
 ### Admin account
 
@@ -90,23 +90,25 @@ Then sign in at `/admin/login`.
 
 ## Data storage
 
-There is no database. `src/server/outbound/store/json.store.ts` keeps every record (users, health profiles, routines, plans, chats, messages, XP events, settings) in one pretty-printed JSON file. Writes are applied in memory and flushed atomically (write to a temp file, then rename), so the file is never half-written. The file is re-read when another process changes it.
+There is no database. `src/server/outbound/store/json.store.ts` keeps every record (users, health profiles, routines, plans, chats, messages, XP events, settings) in one pretty-printed JSON file, `db.json`. Where that file lives depends on where the app runs:
 
-To reset all data, stop the app and delete `data/db.json`.
+- **Locally:** `data/db.json`. Writes are flushed atomically (temp file, then rename), and the file is re-read when another process changes it. To reset all data, stop the app and delete `data/db.json`.
+- **On Vercel:** a private file `heaith/db.json` in the connected Vercel Blob store (see below), so every serverless instance reads and writes the same data. Each API request pulls the latest version (a conditional request that returns nothing if it hasn't changed) and saves its changes with a conditional write. If another instance saved in between, the changes are merged row by row and the save is retried, so concurrent users don't overwrite each other. To reset, delete `heaith/db.json` in the Blob store.
 
 ### PDF documents
 
 - PDFs in `public/documents/` are served as static files, which the admin viewer opens directly.
 - Their page text is stored in `data/documents/*.json` and searched to ground chat answers and routine reports. After adding or replacing a PDF there, run `npm run index:documents` and commit the result.
-- PDFs uploaded through the admin portal are stored in `data/uploads/` (`/tmp/heaith/uploads/` on Vercel) and indexed the same way. If `GEMINI_API_KEY` is set, they are also pushed to a Gemini File Search store.
+- PDFs uploaded through the admin portal are stored in `data/uploads/` locally, or privately under `heaith/uploads/` in Vercel Blob, and indexed the same way. If `GEMINI_API_KEY` is set, they are also pushed to a Gemini File Search store.
 
 ## Deploying to Vercel
 
 1. Import the GitHub repository in Vercel. The framework is detected as Next.js, and no build settings need changing.
 2. Add `GEMINI_API_KEY` under Settings → Environment Variables.
-3. Deploy.
+3. Create the data store: **Storage → Create Database → Blob**, then connect it to this project. Vercel adds `BLOB_READ_WRITE_TOKEN` to the project automatically; you don't need to put it in `.env`.
+4. Deploy (or redeploy, if the project was deployed before the store was connected).
 
-> **Vercel storage is temporary.** Serverless functions can only write to `/tmp`, which is per-instance and cleared when an instance is recycled. On Vercel, accounts, routines and chats written to the JSON file persist only for the life of an instance, and different instances do not share data. That is fine for demos and judging. For durable production data, run the app on a server with a persistent disk (`npm run build && npm start`; data is written to `data/`). The bundled PDF, extracted text and Excel tables are part of the deployment and always available.
+> **Without a Blob store**, the app still runs on Vercel but falls back to `/tmp`, which is private to each serverless instance and wiped when it restarts. Data then seems to disappear between requests (for example "Health status not found" right after submitting the health form). The logs show a warning when this fallback is used.
 
 Other Vercel limits: request bodies are capped at 4.5 MB, so large PDFs should be added to `public/documents/` in the repository rather than uploaded through the admin portal. API calls can run for up to 60 seconds, which is enough for routine generation.
 

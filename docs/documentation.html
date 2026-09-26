@@ -110,7 +110,7 @@
 </table>
 
 <h2>4. Data storage</h2>
-<p><code>JsonStore</code> (<code>src/server/outbound/store/json.store.ts</code>) keeps the whole dataset in one pretty-printed JSON file: <code>data/db.json</code> locally, <code>/tmp/heaith/db.json</code> on Vercel.</p>
+<p><code>JsonStore</code> (<code>src/server/outbound/store/json.store.ts</code>) keeps the whole dataset in one pretty-printed JSON file: <code>data/db.json</code> locally, and the private blob <code>heaith/db.json</code> in Vercel Blob when a Blob store is connected (<code>BLOB_READ_WRITE_TOKEN</code> is set).</p>
 <ul>
   <li><b>Reads</b> return deep clones, so callers can never change stored data by accident.</li>
   <li><b>Writes</b> run synchronously: mutate in memory, write a temp file, then rename it over <code>db.json</code>. A crash cannot leave a half-written file, and a write cannot interleave with another request in the same process.</li>
@@ -136,14 +136,21 @@
   <tr><td>ragStores, settings</td><td>Gemini File Search store name; selected Gemini model</td></tr>
 </table>
 <p>Disease prevalence by exercise frequency (the v1 <code>DiseaseRateByExercise</code> table) was static seed data. It is now read directly from <code>src/server/shared/data/disease-rate.seed.ts</code>.</p>
-<div class="note warn"><b>Vercel persistence.</b> On Vercel the only writable location is <code>/tmp</code>, which belongs to a single function instance and is wiped when that instance is recycled. User data therefore lasts only for the life of an instance there. For persistent data, run <code>next start</code> on a host with a disk; data is then written to <code>data/</code>.</div>
+<h3>Vercel Blob mode</h3>
+<p>Serverless instances on Vercel do not share a disk, so there the file lives in Vercel Blob. Repositories keep the same synchronous API; the API handler wraps each request:</p>
+<ol>
+  <li><b>sync()</b>: before the handler, fetch <code>heaith/db.json</code> with <code>ifNoneMatch</code> (the ETag of the copy in memory). An unchanged file costs a 304 with no body. The pull is skipped while this instance has unsaved changes.</li>
+  <li>The handler runs against the in-memory copy.</li>
+  <li><b>commit()</b>: before the response is returned, save with <code>ifMatch</code> (conditional write). If another instance saved first, the latest file is fetched, this instance's changes since its last sync are replayed onto it row by row (added, changed and deleted rows by id; last writer wins per row), and the save is retried up to five times. Commits within one instance are serialised.</li>
+</ol>
+<div class="note warn"><b>No Blob store connected.</b> The app then falls back to <code>/tmp/heaith</code>, which is private to one serverless instance and wiped when it is recycled, so data appears to vanish between requests. A warning is logged in this case.</div>
 
 <h2>5. Documents and statistics data</h2>
 <h3>PDF library</h3>
 <ul>
   <li><b>Bundled PDFs</b> live in <code>public/documents/</code> (currently <i>2024 국민건강통계.pdf</i>, 343 pages) and are served as static files.</li>
   <li><code>npm run index:documents</code> extracts each page's text with <code>unpdf</code> (pdf.js). It applies the same Korean text clean-up as v1 and writes <code>data/documents/&lt;name&gt;.json</code>: id (derived from the filename), public URL, and page texts, where page 1 is index 0.</li>
-  <li><b>Uploaded PDFs</b> (admin, <code>POST /api/files/upload</code>) are stored as <code>data/uploads/&lt;id&gt;.pdf</code> (<code>/tmp/heaith/uploads</code> on Vercel) with a <code>.pages.json</code> text file beside them.</li>
+  <li><b>Uploaded PDFs</b> (admin, <code>POST /api/files/upload</code>) are stored as <code>&lt;id&gt;.pdf</code> with a <code>&lt;id&gt;.pages.json</code> text file, in <code>data/uploads/</code> locally or privately under <code>heaith/uploads/</code> in Vercel Blob.</li>
   <li><code>DocumentLibrary</code> merges both sources. The admin PDF viewer asks <code>/api/files/download/:id</code> for a URL: the static file for bundled PDFs, or <code>/api/files/raw/:id</code> for uploads.</li>
 </ul>
 <h3>KNHANES tables</h3>
@@ -270,6 +277,7 @@
 <table>
   <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
   <tr><td>GEMINI_API_KEY</td><td>—</td><td>Enables AI features</td></tr>
+  <tr><td>BLOB_READ_WRITE_TOKEN</td><td>added by Vercel</td><td>Set automatically when a Blob store is connected; switches storage to Vercel Blob</td></tr>
 </table>
 
 <h2>11. Running and deploying</h2>
@@ -280,7 +288,7 @@ npm run dev                    # http://localhost:3000
 npm run build &amp;&amp; npm start     # production server
 npm run index:documents        # after changing public/documents
 npm run docs:pdf               # rebuild this document</pre>
-<p><b>Vercel:</b> import the repository, set the environment variables, and deploy. No build settings need changing. The API route has a 60-second limit, which covers routine generation. The bundled PDF text and Excel tables are traced into the function through <code>outputFileTracingIncludes</code> in <code>next.config.ts</code>.</p>
+<p><b>Vercel:</b> import the repository, add <code>GEMINI_API_KEY</code>, create a Blob store (Storage → Create Database → Blob) and connect it to the project, which adds <code>BLOB_READ_WRITE_TOKEN</code> automatically, then deploy. No build settings need changing. The API route has a 60-second limit, which covers routine generation. The bundled PDF text and Excel tables are traced into the function through <code>outputFileTracingIncludes</code> in <code>next.config.ts</code>.</p>
 
 <h2>12. Migration from v1</h2>
 <table>
