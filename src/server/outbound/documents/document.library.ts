@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { UploadStorage } from "../store/blob.storage";
 import { JsonStore } from "../store/json.store";
 
 /** Page-text file written by `npm run index:documents` for each PDF in public/documents. */
@@ -19,12 +20,33 @@ export type DocumentMeta = {
     source: "bundled" | "upload";
 };
 
-export type PdfLocation = { kind: "url"; url: string } | { kind: "file"; filePath: string };
+/** A bundled PDF is a static file at `url`; an uploaded one is served by the API. */
+export type PdfLocation = { kind: "url"; url: string } | { kind: "upload" };
+
+/** Keeps uploaded PDFs in a folder on the local disk. */
+export class LocalUploadStorage implements UploadStorage {
+    constructor(private readonly _dir: string) {}
+
+    async save(name: string, body: Buffer | string) {
+        fs.mkdirSync(this._dir, { recursive: true });
+        fs.writeFileSync(path.join(this._dir, name), body);
+    }
+
+    async load(name: string) {
+        const filePath = path.join(this._dir, name);
+        return fs.existsSync(filePath) ? fs.readFileSync(filePath) : null;
+    }
+
+    async remove(name: string) {
+        fs.rmSync(path.join(this._dir, name), { force: true });
+    }
+}
 
 /**
  * The set of PDFs the app can read and cite. Bundled documents ship with the
  * app (PDF in public/documents, text in data/documents); uploaded documents
- * are stored in the writable data directory and registered in the JSON store.
+ * are kept in an UploadStorage (local folder or Vercel Blob) and registered in
+ * the JSON store. Call prepare() before a request so their page text is cached.
  */
 export class DocumentLibrary {
     private _bundled: Map<string, BundledDocumentFile> | null = null;
@@ -33,7 +55,7 @@ export class DocumentLibrary {
     constructor(
         private readonly _store: JsonStore,
         private readonly _bundledDir: string,
-        private readonly _uploadDir: string,
+        private readonly _uploads: UploadStorage,
         /** public/documents, where the bundled PDFs themselves live. */
         private readonly _publicPdfDir: string,
     ) {}
@@ -66,58 +88,55 @@ export class DocumentLibrary {
         return this.list().find((doc) => doc.id === id) ?? null;
     }
 
+    /** Loads the page text of uploaded documents that are not cached in this instance yet. */
+    async prepare(): Promise<void> {
+        const ids = this._store.read((db) => db.uploadedFiles.map((row) => row.id));
+        await Promise.all(
+            ids
+                .filter((id) => !this._uploadedPages.has(id))
+                .map(async (id) => {
+                    const raw = await this._uploads.load(pagesName(id));
+                    if (raw) this._uploadedPages.set(id, JSON.parse(raw.toString("utf8")) as string[]);
+                }),
+        );
+    }
+
     getPages(id: string): string[] {
         const bundled = this._loadBundled().get(id);
         if (bundled) return bundled.pages;
-
-        const cached = this._uploadedPages.get(id);
-        if (cached) return cached;
-        const pagesPath = this._uploadedPagesPath(id);
-        if (!fs.existsSync(pagesPath)) return [];
-        const pages = JSON.parse(fs.readFileSync(pagesPath, "utf8")) as string[];
-        this._uploadedPages.set(id, pages);
-        return pages;
+        return this._uploadedPages.get(id) ?? [];
     }
 
     getPdfLocation(id: string): PdfLocation | null {
         const bundled = this._loadBundled().get(id);
         if (bundled) return { kind: "url", url: bundled.url };
-        const filePath = this._uploadedPdfPath(id);
-        return fs.existsSync(filePath) ? { kind: "file", filePath } : null;
+        return this.find(id) ? { kind: "upload" } : null;
     }
 
     /** Raw bytes of a document's PDF, or null if the file is missing. */
-    readPdf(id: string): Buffer | null {
+    async readPdf(id: string): Promise<Buffer | null> {
         const bundled = this._loadBundled().get(id);
-        const filePath = bundled
-            ? path.join(this._publicPdfDir, bundled.filename)
-            : this._uploadedPdfPath(id);
-        return fs.existsSync(filePath) ? fs.readFileSync(filePath) : null;
+        if (bundled) {
+            const filePath = path.join(this._publicPdfDir, bundled.filename);
+            return fs.existsSync(filePath) ? fs.readFileSync(filePath) : null;
+        }
+        return this._uploads.load(pdfName(id));
     }
 
     isBundled(id: string): boolean {
         return this._loadBundled().has(id);
     }
 
-    saveUpload(id: string, pdf: Buffer, pages: string[]) {
-        fs.mkdirSync(this._uploadDir, { recursive: true });
-        fs.writeFileSync(this._uploadedPdfPath(id), pdf);
-        fs.writeFileSync(this._uploadedPagesPath(id), JSON.stringify(pages), "utf8");
+    async saveUpload(id: string, pdf: Buffer, pages: string[]) {
+        await this._uploads.save(pdfName(id), pdf, "application/pdf");
+        await this._uploads.save(pagesName(id), JSON.stringify(pages), "application/json");
         this._uploadedPages.set(id, pages);
     }
 
-    removeUpload(id: string) {
+    async removeUpload(id: string) {
         this._uploadedPages.delete(id);
-        fs.rmSync(this._uploadedPdfPath(id), { force: true });
-        fs.rmSync(this._uploadedPagesPath(id), { force: true });
-    }
-
-    private _uploadedPdfPath(id: string) {
-        return path.join(this._uploadDir, `${id}.pdf`);
-    }
-
-    private _uploadedPagesPath(id: string) {
-        return path.join(this._uploadDir, `${id}.pages.json`);
+        await this._uploads.remove(pdfName(id));
+        await this._uploads.remove(pagesName(id));
     }
 
     private _loadBundled(): Map<string, BundledDocumentFile> {
@@ -136,3 +155,6 @@ export class DocumentLibrary {
         return docs;
     }
 }
+
+const pdfName = (id: string) => `${id}.pdf`;
+const pagesName = (id: string) => `${id}.pages.json`;

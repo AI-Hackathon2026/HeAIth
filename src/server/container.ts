@@ -19,7 +19,8 @@ import { KnhanesService } from "./application/services/knhanes.service";
 import { AuthMiddleware } from "./Inbound/middlewares/auth.middleware";
 import { Gemini } from "./outbound/chatbot/gemini";
 import { KnhanesAdapter } from "./outbound/data/knhanes.adapter";
-import { DocumentLibrary } from "./outbound/documents/document.library";
+import { DocumentLibrary, LocalUploadStorage } from "./outbound/documents/document.library";
+import { BlobDbStorage, BlobUploadStorage, isBlobConfigured } from "./outbound/store/blob.storage";
 import { ScryptHashManager } from "./outbound/managers/scrypt-hash.manager";
 import {
     PlanProgressEventCommandRepo,
@@ -64,11 +65,20 @@ function createContainer() {
     const config = new ConfigUtil();
     const { RUNTIME_DATA_DIR, BUNDLED_DATA_DIR } = config.parsed();
 
-    const store = new JsonStore(path.join(RUNTIME_DATA_DIR, "db.json"));
+    // With a Vercel Blob store connected, db.json and uploaded PDFs live in Blob so
+    // every serverless instance shares them; otherwise they are files under data/.
+    const useBlob = isBlobConfigured();
+    if (!useBlob && process.env.VERCEL) {
+        console.warn("[store] No Vercel Blob store connected: data is kept in /tmp and will not persist.");
+    }
+    const store = new JsonStore(
+        path.join(RUNTIME_DATA_DIR, "db.json"),
+        useBlob ? new BlobDbStorage() : null,
+    );
     const library = new DocumentLibrary(
         store,
         path.join(BUNDLED_DATA_DIR, "documents"),
-        path.join(RUNTIME_DATA_DIR, "uploads"),
+        useBlob ? new BlobUploadStorage() : new LocalUploadStorage(path.join(RUNTIME_DATA_DIR, "uploads")),
         path.join(process.cwd(), "public", "documents"),
     );
 

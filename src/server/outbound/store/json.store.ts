@@ -1,25 +1,43 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { RemoteDbStorage } from "./blob.storage";
+import { rebaseDb } from "./db.merge";
 import { createEmptyDb, DbSchema } from "./db.schema";
 
+const MAX_SAVE_ATTEMPTS = 5;
+
 /**
- * File-backed replacement for the PostgreSQL database.
+ * File-based replacement for the PostgreSQL database: the whole dataset is one
+ * JSON text file. Repositories use the synchronous read()/write() API against
+ * an in-memory copy.
  *
- * The whole dataset lives in one JSON text file. Reads and writes are
- * synchronous, so a mutation and its flush to disk can never interleave with
- * another request inside the same Node process. The file is re-read whenever
- * its mtime changes, which keeps several local processes (e.g. `next dev`
- * workers) in sync.
+ * - Local mode: the file is data/db.json. Every write is flushed atomically
+ *   (temp file + rename) and the file is re-read when its mtime changes.
+ * - Remote mode (Vercel Blob): call sync() before handling a request and
+ *   commit() after it. sync() pulls the latest file, and commit() saves with a
+ *   conditional write; if another instance saved first, our changes are
+ *   merged into its version (row by row) and the save is retried.
  */
 export class JsonStore {
     private _cache: DbSchema | null = null;
     private _mtimeMs = -1;
 
-    constructor(private readonly _filePath: string) {}
+    // Remote mode state
+    private _base: DbSchema | null = null;
+    private _etag: string | null = null;
+    private _loaded = false;
+    private _writeVersion = 0;
+    private _savedVersion = 0;
+    private _commitQueue: Promise<void> = Promise.resolve();
 
-    get filePath() {
-        return this._filePath;
+    constructor(
+        private readonly _filePath: string,
+        private readonly _remote: RemoteDbStorage | null = null,
+    ) {}
+
+    get isRemote() {
+        return this._remote !== null;
     }
 
     /** Runs `fn` against a snapshot; the result is deep-cloned so callers cannot mutate the cache. */
@@ -27,15 +45,79 @@ export class JsonStore {
         return structuredClone(fn(this._load()));
     }
 
-    /** Runs `fn` against the live data and persists the file afterwards. */
+    /** Runs `fn` against the live data; locally the file is written immediately. */
     write<T>(fn: (db: DbSchema) => T): T {
         const db = this._load();
         const result = fn(db);
-        this._persist(db);
+        if (this._remote) {
+            this._writeVersion++;
+        } else {
+            this._persist(db);
+        }
         return structuredClone(result);
     }
 
+    /** Remote mode: fetch the latest data file unless this instance has unsaved changes. */
+    async sync(): Promise<void> {
+        if (!this._remote) return;
+        if (this._loaded && this._writeVersion !== this._savedVersion) return;
+
+        const result = await this._remote.load(this._loaded ? this._etag : null);
+        if (result.status === "loaded") {
+            this._applyRemote(result.db, result.etag);
+        } else if (result.status === "missing" && !this._loaded) {
+            this._applyRemote(createEmptyDb(), null);
+        }
+        this._loaded = true;
+    }
+
+    /** Remote mode: save changes made since the last save. Commits run one at a time. */
+    commit(): Promise<void> {
+        if (!this._remote) return Promise.resolve();
+        const run = this._commitQueue.then(() => this._saveRemote());
+        this._commitQueue = run.catch(() => undefined);
+        return run;
+    }
+
+    private async _saveRemote() {
+        const remote = this._remote!;
+        for (let attempt = 1; attempt <= MAX_SAVE_ATTEMPTS; attempt++) {
+            const version = this._writeVersion;
+            if (version === this._savedVersion || !this._cache) return;
+
+            const snapshot = structuredClone(this._cache);
+            const result = await remote.save(snapshot, this._etag);
+            if (result.status === "saved") {
+                this._etag = result.etag;
+                this._base = snapshot;
+                this._savedVersion = version;
+                continue; // Save again if more writes arrived meanwhile.
+            }
+
+            // Another instance saved first: merge our changes into its version and retry.
+            const latest = await remote.load(null);
+            if (latest.status !== "loaded") continue;
+            this._cache = rebaseDb(this._base ?? createEmptyDb(), this._cache, latest.db);
+            this._base = latest.db;
+            this._etag = latest.etag;
+        }
+        throw new Error("Could not save data: too many concurrent updates. Please retry.");
+    }
+
+    private _applyRemote(db: DbSchema, etag: string | null) {
+        this._cache = db;
+        this._base = structuredClone(db);
+        this._etag = etag;
+    }
+
     private _load(): DbSchema {
+        if (this._remote) {
+            if (!this._cache) {
+                throw new Error("JsonStore.sync() must run before the data is used.");
+            }
+            return this._cache;
+        }
+
         let mtimeMs: number;
         try {
             mtimeMs = fs.statSync(this._filePath).mtimeMs;

@@ -39,7 +39,7 @@ export class FileCommandRepo implements IFileCommandRepo {
         for (const file of files) {
             const id = newId();
             const pages = [...file.contentVos].sort((a, b) => a.page - b.page).map((vo) => vo.content);
-            this.library.saveUpload(id, file.pdf ?? Buffer.alloc(0), pages);
+            await this.library.saveUpload(id, file.pdf ?? Buffer.alloc(0), pages);
             this.store.write((db) => {
                 const now = nowIso();
                 db.uploadedFiles.push({ id, filename: file.filename, createdAt: now, updatedAt: now });
@@ -62,7 +62,7 @@ export class FileCommandRepo implements IFileCommandRepo {
         this.store.write((db) => {
             db.uploadedFiles = db.uploadedFiles.filter((f) => f.id !== id);
         });
-        this.library.removeUpload(id);
+        await this.library.removeUpload(id);
     }
 
     async findSummaryById(id: string): Promise<FileSummary | null> {

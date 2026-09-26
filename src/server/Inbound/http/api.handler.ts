@@ -54,10 +54,23 @@ export async function handleApiRequest(request: NextRequest, pathSegments: strin
             role: "",
         };
 
-        for (const middleware of matched.route.middlewares) {
-            await middleware(req);
+        const { store, library } = getContainer();
+        await store.sync();
+        await library.prepare();
+
+        let response: Response;
+        try {
+            for (const middleware of matched.route.middlewares) {
+                await middleware(req);
+            }
+            response = await matched.route.handler(req);
+        } catch (err) {
+            response = await toErrorResponse(err);
         }
-        return await matched.route.handler(req);
+
+        // Persist before responding: a serverless instance may be frozen right after.
+        await store.commit();
+        return response;
     } catch (err) {
         return toErrorResponse(err);
     }

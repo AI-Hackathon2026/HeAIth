@@ -1,4 +1,3 @@
-import fs from "fs";
 import z from "zod";
 import { NextResponse } from "next/server";
 import { Container } from "../../container";
@@ -178,7 +177,7 @@ export function registerRoutes(router: ApiRouter, c: Container) {
 
     router.post("/chatbot/embeddings/:fileId", isAdmin, async (req) => {
         const doc = c.library.find(req.params.fileId);
-        const pdf = doc && c.library.readPdf(doc.id);
+        const pdf = doc && (await c.library.readPdf(doc.id));
         if (!doc || !pdf) {
             throw new BusinessException({ type: BusinessExceptionType.FILE_NOT_FOUND });
         }
@@ -298,7 +297,11 @@ export function registerRoutes(router: ApiRouter, c: Container) {
         if (location.kind === "url") {
             return new Response(null, { status: 302, headers: { Location: location.url } });
         }
-        return new NextResponse(new Uint8Array(fs.readFileSync(location.filePath)), {
+        const pdf = await c.library.readPdf(doc.id);
+        if (!pdf) {
+            return json({ message: "File not found" }, 404);
+        }
+        return new NextResponse(new Uint8Array(pdf), {
             headers: {
                 "Content-Type": "application/pdf",
                 "Content-Disposition": buildInlineContentDisposition(doc.filename),
