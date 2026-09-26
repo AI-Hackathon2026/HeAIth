@@ -1,0 +1,248 @@
+import path from "path";
+import { AuthCommandService } from "./application/command/services/auth.command.service";
+import { CharacterCommandService } from "./application/command/services/character.command.service";
+import { ChatCommandService } from "./application/command/services/chat.command.service";
+import { ChatbotCommandService } from "./application/command/services/chatbot.command.service";
+import { FileCommandService } from "./application/command/services/file.command.service";
+import { HealthRecordCommandService } from "./application/command/services/health-record.command.service";
+import { HealthstatusCommandService } from "./application/command/services/healthstatus.command.service";
+import { RoutineCommandService } from "./application/command/services/routine.command.service";
+import { UserCommandService } from "./application/command/services/user.command.service";
+import { UserEntity } from "./application/command/entity/user.entity";
+import { CharacterQueryService } from "./application/query/services/character.query.service";
+import { ChatQueryService } from "./application/query/services/chat.query.service";
+import { FileQueryService } from "./application/query/services/file.query.service";
+import { HealthRecordQueryService } from "./application/query/services/health-record.query.service";
+import { RagQueryService } from "./application/query/services/rag.query.service";
+import { RoutineQueryService } from "./application/query/services/routine.query.service";
+import { UserQueryService } from "./application/query/services/user.query.service";
+import { KnhanesService } from "./application/services/knhanes.service";
+import { AuthMiddleware } from "./Inbound/middlewares/auth.middleware";
+import { Gemini } from "./outbound/chatbot/gemini";
+import { KnhanesAdapter } from "./outbound/data/knhanes.adapter";
+import { DocumentLibrary } from "./outbound/documents/document.library";
+import { ScryptHashManager } from "./outbound/managers/scrypt-hash.manager";
+import {
+    PlanProgressEventCommandRepo,
+    PlanProgressEventQueryRepo,
+    UserCharacterProgressCommandRepo,
+    UserCharacterProgressQueryRepo,
+} from "./outbound/repo/character.repo";
+import { ChatCommandRepo, ChatQueryRepo, MessageCommandRepo } from "./outbound/repo/chat.repo";
+import {
+    FileCommandRepo,
+    FileQueryRepo,
+    RagStoreCommandRepo,
+    RagStoreQueryRepo,
+} from "./outbound/repo/file.repo";
+import {
+    DiseaseRateQueryRepo,
+    HealthRecordCommandRepo,
+    HealthRecordQueryRepo,
+    HealthstatusCommandRepo,
+    HealthStatusQueryRepo,
+} from "./outbound/repo/health.repo";
+import {
+    DailyRoutineCommandRepo,
+    ExercisePlanCommandRepo,
+    ExercisePlanQueryRepo,
+    NutritionFoodItemCommandRepo,
+    NutritionFoodItemQueryRepo,
+    NutritionPlanCommandRepo,
+    NutritionPlanQueryRepo,
+    NutritionSummaryCommandRepo,
+    RoutineCommandRepo,
+    RoutineQueryRepo,
+} from "./outbound/repo/routine.repo";
+import { UserCommandRepo, UserQueryRepo } from "./outbound/repo/user.repo";
+import { JsonStore } from "./outbound/store/json.store";
+import { UnitOfWork } from "./outbound/unit.of.work";
+import { ConfigUtil } from "./shared/utils/config.util";
+import { CookieUtil } from "./shared/utils/cookie.util";
+import { EmailUtil } from "./shared/utils/email.util";
+import { TokenUtil } from "./shared/utils/token.util";
+import { Role } from "./shared/types/enums";
+
+function createContainer() {
+    const config = new ConfigUtil();
+    const { RUNTIME_DATA_DIR, BUNDLED_DATA_DIR } = config.parsed();
+
+    const store = new JsonStore(path.join(RUNTIME_DATA_DIR, "db.json"));
+    const library = new DocumentLibrary(
+        store,
+        path.join(BUNDLED_DATA_DIR, "documents"),
+        path.join(RUNTIME_DATA_DIR, "uploads"),
+    );
+
+    const tokenUtil = new TokenUtil(config);
+    const unitOfWork = new UnitOfWork();
+    const hashManager = new ScryptHashManager();
+    const emailUtil = new EmailUtil(config);
+    const cookieUtil = new CookieUtil(config);
+
+    // Repos
+    const userCommandRepo = new UserCommandRepo(store);
+    const userQueryRepo = new UserQueryRepo(store);
+    const messageCommandRepo = new MessageCommandRepo(store);
+    const chatCommandRepo = new ChatCommandRepo(store);
+    const chatQueryRepo = new ChatQueryRepo(store);
+    const fileQueryRepo = new FileQueryRepo(library);
+    const fileCommandRepo = new FileCommandRepo(store, library);
+    const ragStoreCommandRepo = new RagStoreCommandRepo(store);
+    const ragStoreQueryRepo = new RagStoreQueryRepo(store);
+    const healthstatusCommandRepo = new HealthstatusCommandRepo(store);
+    const healthRecordCommandRepo = new HealthRecordCommandRepo(store);
+    const healthRecordQueryRepo = new HealthRecordQueryRepo(store);
+    const healthStatusQueryRepo = new HealthStatusQueryRepo(store);
+    const diseaseRateQueryRepo = new DiseaseRateQueryRepo();
+    const routineCommandRepo = new RoutineCommandRepo(store);
+    const routineQueryRepo = new RoutineQueryRepo(store);
+    const dailyRoutineCommandRepo = new DailyRoutineCommandRepo(store);
+    const nutritionPlanCommandRepo = new NutritionPlanCommandRepo(store);
+    const nutritionFoodItemCommandRepo = new NutritionFoodItemCommandRepo(store);
+    const nutritionSummaryCommandRepo = new NutritionSummaryCommandRepo(store);
+    const exercisePlanCommandRepo = new ExercisePlanCommandRepo(store);
+    const nutritionPlanQueryRepo = new NutritionPlanQueryRepo(store);
+    const nutritionFoodItemQueryRepo = new NutritionFoodItemQueryRepo(store);
+    const exercisePlanQueryRepo = new ExercisePlanQueryRepo(store);
+    const characterProgressQueryRepo = new UserCharacterProgressQueryRepo(store);
+    const characterProgressCommandRepo = new UserCharacterProgressCommandRepo(store);
+    const planProgressEventQueryRepo = new PlanProgressEventQueryRepo(store);
+    const planProgressEventCommandRepo = new PlanProgressEventCommandRepo(store);
+
+    // AI
+    const gemini = new Gemini(config, store);
+    const models = { gemini };
+
+    // Services
+    const chatCommandService = new ChatCommandService(chatCommandRepo, messageCommandRepo);
+    const chatbotCommandService = new ChatbotCommandService(
+        models,
+        unitOfWork,
+        chatCommandService,
+        ragStoreQueryRepo,
+        fileQueryRepo,
+    );
+    const chatQueryService = new ChatQueryService(chatQueryRepo);
+    const knhanesService = new KnhanesService(new KnhanesAdapter());
+    const userCommandService = new UserCommandService(unitOfWork, hashManager, emailUtil, userCommandRepo);
+    const userQueryService = new UserQueryService(userQueryRepo, hashManager);
+    const authCommandService = new AuthCommandService(
+        unitOfWork,
+        config,
+        hashManager,
+        tokenUtil,
+        emailUtil,
+        userCommandRepo,
+    );
+    const healthRecordCommandService = new HealthRecordCommandService(
+        unitOfWork,
+        healthRecordCommandRepo,
+        healthRecordQueryRepo,
+        healthStatusQueryRepo,
+        diseaseRateQueryRepo,
+    );
+    const healthRecordQueryService = new HealthRecordQueryService(healthRecordQueryRepo, healthStatusQueryRepo);
+    const healthstatusCommandService = new HealthstatusCommandService(
+        unitOfWork,
+        healthstatusCommandRepo,
+        healthRecordCommandService,
+    );
+    const characterQueryService = new CharacterQueryService(
+        characterProgressQueryRepo,
+        characterProgressCommandRepo,
+    );
+    const characterCommandService = new CharacterCommandService(
+        characterProgressCommandRepo,
+        characterProgressQueryRepo,
+        planProgressEventQueryRepo,
+        planProgressEventCommandRepo,
+    );
+    const routineCommandService = new RoutineCommandService(
+        unitOfWork,
+        models,
+        routineCommandRepo,
+        routineQueryRepo,
+        healthStatusQueryRepo,
+        healthRecordQueryRepo,
+        dailyRoutineCommandRepo,
+        nutritionPlanCommandRepo,
+        nutritionSummaryCommandRepo,
+        exercisePlanCommandRepo,
+        nutritionPlanQueryRepo,
+        nutritionFoodItemCommandRepo,
+        nutritionFoodItemQueryRepo,
+        exercisePlanQueryRepo,
+        fileQueryRepo,
+        characterCommandService,
+        chatCommandRepo,
+        chatQueryRepo,
+        messageCommandRepo,
+    );
+    const routineQueryService = new RoutineQueryService(routineQueryRepo, characterQueryService);
+    const fileQueryService = new FileQueryService(fileQueryRepo);
+    const ragQueryService = new RagQueryService(ragStoreQueryRepo, gemini);
+    const fileCommandService = new FileCommandService(
+        unitOfWork,
+        fileCommandRepo,
+        ragStoreCommandRepo,
+        ragStoreQueryRepo,
+        gemini,
+    );
+
+    const ready = ensureBootstrapAdmin();
+
+    /** Creates the ADMIN_EMAIL/ADMIN_PASSWORD account the first time the data file is used. */
+    async function ensureBootstrapAdmin() {
+        const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_USERNAME } = config.parsed();
+        if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return;
+        if (await userCommandRepo.findByEmail(ADMIN_EMAIL)) return;
+        const admin = await UserEntity.createNew({
+            email: ADMIN_EMAIL,
+            username: ADMIN_USERNAME,
+            password: ADMIN_PASSWORD,
+            role: Role.ADMIN,
+            hashManager,
+        });
+        await userCommandRepo.create(admin);
+        console.info(`[bootstrap] Created admin account ${ADMIN_EMAIL}`);
+    }
+
+    return {
+        ready,
+        config,
+        store,
+        library,
+        tokenUtil,
+        emailUtil,
+        cookieUtil,
+        auth: new AuthMiddleware(tokenUtil),
+        authCommandService,
+        userCommandService,
+        userQueryService,
+        chatCommandService,
+        chatQueryService,
+        chatbotCommandService,
+        knhanesService,
+        fileCommandService,
+        fileQueryService,
+        ragQueryService,
+        healthstatusCommandService,
+        healthRecordCommandService,
+        healthRecordQueryService,
+        characterCommandService,
+        characterQueryService,
+        routineCommandService,
+        routineQueryService,
+    };
+}
+
+export type Container = ReturnType<typeof createContainer>;
+
+// Reuse one container per process (and across hot reloads in `next dev`).
+const globalForContainer = globalThis as unknown as { __heaithContainer?: Container };
+
+export function getContainer(): Container {
+    globalForContainer.__heaithContainer ??= createContainer();
+    return globalForContainer.__heaithContainer;
+}
