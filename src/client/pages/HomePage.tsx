@@ -186,6 +186,27 @@ export function HomePage() {
         )}
       </div>
 
+      {page === 0 && (
+        <button
+          type="button"
+          className="landing-scroll-arrow landing-scroll-arrow--down"
+          aria-label="소개 영상으로 이동"
+          onClick={() => goToPage(1)}
+        >
+          <i className="ti ti-chevron-down" aria-hidden />
+        </button>
+      )}
+      {page === 1 && (
+        <button
+          type="button"
+          className="landing-scroll-arrow landing-scroll-arrow--up"
+          aria-label="메인으로 이동"
+          onClick={() => goToPage(0)}
+        >
+          <i className="ti ti-chevron-up" aria-hidden />
+        </button>
+      )}
+
       <nav className="landing-scroll-nav" aria-label="페이지 이동">
         {PAGE_LABELS.map((label, index) => (
           <button
