@@ -1,0 +1,23 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# runtime data written by the app (the JSON database and uploaded PDFs)
+/data/db.json
+/data/db.json.*.tmp
+/data/uploads/
+
+# env files
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+.vercel
