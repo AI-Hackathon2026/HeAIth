@@ -143,6 +143,7 @@
   <li>The handler runs against the in-memory copy.</li>
   <li><b>commit()</b>: before the response is returned, save with <code>ifMatch</code> (conditional write). If another instance saved first, the latest file is fetched, this instance's changes since its last sync are replayed onto it row by row (added, changed and deleted rows by id; last writer wins per row), and the save is retried up to five times. Commits within one instance are serialised.</li>
 </ol>
+<p>Credentials are detected from any variable Vercel may add when the store is connected: <code>BLOB_READ_WRITE_TOKEN</code>, a <code>vercel_blob_rw_…</code> token under a custom prefix, or a store ID (<code>BLOB_STORE_ID</code> / <code>BLOB_READ_WRITE_TOKEN_STORE_ID</code>) used with Vercel's OIDC credentials. They are passed explicitly to every Blob call. <code>GET /api/health</code> reports the storage mode (<code>vercel-blob</code>, <code>temporary</code> or <code>local-file</code>), the name of the credential variable in use, and whether the data file can be read.</p>
 <div class="note warn"><b>No Blob store connected.</b> The app then falls back to <code>/tmp/heaith</code>, which is private to one serverless instance and wiped when it is recycled, so data appears to vanish between requests. A warning is logged in this case.</div>
 
 <h2>5. Documents and statistics data</h2>

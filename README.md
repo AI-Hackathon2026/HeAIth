@@ -106,7 +106,16 @@ There is no database. `src/server/outbound/store/json.store.ts` keeps every reco
 1. Import the GitHub repository in Vercel. The framework is detected as Next.js, and no build settings need changing.
 2. Add `GEMINI_API_KEY` under Settings → Environment Variables.
 3. Create the data store: **Storage → Create Database → Blob**, then connect it to this project. Vercel adds `BLOB_READ_WRITE_TOKEN` to the project automatically; you don't need to put it in `.env`.
-4. Deploy (or redeploy, if the project was deployed before the store was connected).
+4. Deploy (or redeploy, if the project was deployed before the store was connected). Environment variables only reach deployments made after they were added.
+5. Open `https://<your-domain>/api/health`. It should show `"mode": "vercel-blob"` and `"status": "ok"`.
+
+The app recognises every form of Blob credentials Vercel adds: `BLOB_READ_WRITE_TOKEN`, a token under a custom prefix (for example `HEAITH_READ_WRITE_TOKEN`), or a store ID (`BLOB_STORE_ID` / `BLOB_READ_WRITE_TOKEN_STORE_ID`) combined with Vercel's automatic OIDC credentials. `/api/health` names the variable in use (never its value).
+
+| `/api/health` shows | Meaning and fix |
+|---|---|
+| `"mode": "vercel-blob"`, `"status": "ok"` | Data is saved in Blob. |
+| `"mode": "temporary"` | This deployment has no Blob credentials. Connect the store to the project for the **Production** environment, then redeploy. |
+| `"status": "error"` | Credentials were found but Blob rejected them. The `error` field says why; with a store ID only, check that OIDC federation is enabled under Settings → Security. |
 
 > **Without a Blob store**, the app still runs on Vercel but falls back to `/tmp`, which is private to each serverless instance and wiped when it restarts. Data then seems to disappear between requests (for example "Health status not found" right after submitting the health form). The logs show a warning when this fallback is used.
 
