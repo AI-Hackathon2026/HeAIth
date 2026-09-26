@@ -8,7 +8,6 @@ import { HealthRecordCommandService } from "./application/command/services/healt
 import { HealthstatusCommandService } from "./application/command/services/healthstatus.command.service";
 import { RoutineCommandService } from "./application/command/services/routine.command.service";
 import { UserCommandService } from "./application/command/services/user.command.service";
-import { UserEntity } from "./application/command/entity/user.entity";
 import { CharacterQueryService } from "./application/query/services/character.query.service";
 import { ChatQueryService } from "./application/query/services/chat.query.service";
 import { FileQueryService } from "./application/query/services/file.query.service";
@@ -59,9 +58,7 @@ import { JsonStore } from "./outbound/store/json.store";
 import { UnitOfWork } from "./outbound/unit.of.work";
 import { ConfigUtil } from "./shared/utils/config.util";
 import { CookieUtil } from "./shared/utils/cookie.util";
-import { EmailUtil } from "./shared/utils/email.util";
 import { TokenUtil } from "./shared/utils/token.util";
-import { Role } from "./shared/types/enums";
 
 function createContainer() {
     const config = new ConfigUtil();
@@ -77,7 +74,6 @@ function createContainer() {
     const tokenUtil = new TokenUtil(config);
     const unitOfWork = new UnitOfWork();
     const hashManager = new ScryptHashManager();
-    const emailUtil = new EmailUtil(config);
     const cookieUtil = new CookieUtil(config);
 
     // Repos
@@ -125,14 +121,13 @@ function createContainer() {
     );
     const chatQueryService = new ChatQueryService(chatQueryRepo);
     const knhanesService = new KnhanesService(new KnhanesAdapter());
-    const userCommandService = new UserCommandService(unitOfWork, hashManager, emailUtil, userCommandRepo);
+    const userCommandService = new UserCommandService(unitOfWork, hashManager, userCommandRepo);
     const userQueryService = new UserQueryService(userQueryRepo, hashManager);
     const authCommandService = new AuthCommandService(
         unitOfWork,
         config,
         hashManager,
         tokenUtil,
-        emailUtil,
         userCommandRepo,
     );
     const healthRecordCommandService = new HealthRecordCommandService(
@@ -190,31 +185,11 @@ function createContainer() {
         gemini,
     );
 
-    const ready = ensureBootstrapAdmin();
-
-    /** Creates the ADMIN_EMAIL/ADMIN_PASSWORD account the first time the data file is used. */
-    async function ensureBootstrapAdmin() {
-        const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_USERNAME } = config.parsed();
-        if (!ADMIN_EMAIL || !ADMIN_PASSWORD) return;
-        if (await userCommandRepo.findByEmail(ADMIN_EMAIL)) return;
-        const admin = await UserEntity.createNew({
-            email: ADMIN_EMAIL,
-            username: ADMIN_USERNAME,
-            password: ADMIN_PASSWORD,
-            role: Role.ADMIN,
-            hashManager,
-        });
-        await userCommandRepo.create(admin);
-        console.info(`[bootstrap] Created admin account ${ADMIN_EMAIL}`);
-    }
-
     return {
-        ready,
         config,
         store,
         library,
         tokenUtil,
-        emailUtil,
         cookieUtil,
         auth: new AuthMiddleware(tokenUtil),
         authCommandService,

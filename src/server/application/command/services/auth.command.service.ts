@@ -8,9 +8,6 @@ import { IHashManager } from "../../port/managers/I.hash.manager";
 import { IUserCommandRepo } from "../../port/repo/command/I.user.command.repo";
 import { IUnitOfWork } from "../../port/repo/I.unit.of.work";
 import { NewUserEntity, UserEntity } from "../entity/user.entity";
-import { IEmailUtil } from "../../port/managers/I.email.util";
-import { approvalRequestMessage } from "../../../shared/messages/approval.request";
-import { waitingApprovalMessage } from "../../../shared/messages/waiting.approval";
 
 
 
@@ -23,39 +20,10 @@ export class AuthCommandService {
         _configUtil: IConfigUtil,
         public readonly hashManager: IHashManager,
         public readonly tokenUtil: ITokenUtil,
-        public readonly emailUtil: IEmailUtil,
         public readonly userCommandRepo: IUserCommandRepo,
     ) {
         this._uow = _uow;
         this._configUtil = _configUtil;
-    }
-
-    private async sendWaitingApprovalNotifications(applicantEmail: string): Promise<void> {
-        const adminEmail = this._configUtil.parsed().ADMIN_EMAIL;
-
-        const { text: waitingApprovalText, html: waitingApprovalHtml } = waitingApprovalMessage({
-            email: applicantEmail,
-        });
-
-        const { text: approvalRequestText, html: approvalRequestHtml } = approvalRequestMessage({
-            applicantEmail,
-            registeredAt: new Date().toISOString(),
-        });
-
-        await this.emailUtil.sendEmail({
-            to: applicantEmail,
-            subject: "Waiting for approval",
-            text: waitingApprovalText,
-            html: waitingApprovalHtml,
-        });
-
-        if (!adminEmail) return;
-        await this.emailUtil.sendEmail({
-            to: adminEmail,
-            subject: "Approval request",
-            text: approvalRequestText,
-            html: approvalRequestHtml,
-        });
     }
 
     async signIn(dto: SignInDto): Promise<{
@@ -113,8 +81,6 @@ export class AuthCommandService {
             });
 
             await this.userCommandRepo.create(user);
-
-            await this.sendWaitingApprovalNotifications(dto.email);
 
             return user;
         } catch (err) {

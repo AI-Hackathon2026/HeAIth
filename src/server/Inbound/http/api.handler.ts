@@ -37,9 +37,6 @@ async function readBody(request: NextRequest): Promise<Pick<ApiRequest, "body" |
 export async function handleApiRequest(request: NextRequest, pathSegments: string[]): Promise<Response> {
     const path = "/" + pathSegments.map(encodeURIComponent).join("/");
     try {
-        const container = getContainer();
-        await container.ready;
-
         const matched = getRouter().match(request.method, path);
         if (!matched) {
             return json({ message: `Cannot ${request.method} ${path}` }, 404);
@@ -79,25 +76,9 @@ async function toErrorResponse(err: unknown): Promise<Response> {
             return json({ message: err.message }, 409);
         }
         console.error(err);
-        await notifyTechnicalError(err);
         return json({ message: "An unexpected error occurred." }, 500);
     }
 
     console.error("Unexpected error:", err);
     return json({ message: "An unexpected error occurred." }, 500);
-}
-
-async function notifyTechnicalError(err: TechnicalException) {
-    try {
-        const { emailUtil, config } = getContainer();
-        const to = config.parsed().EMAIL_USER;
-        if (!to) return;
-        await emailUtil.sendEmail({
-            to,
-            subject: "Technical Error Occurred",
-            text: `Error: ${err.message}\n\nStack Trace: ${err.stack}`,
-        });
-    } catch (emailError) {
-        console.error("Failed to send technical error email.", emailError);
-    }
 }

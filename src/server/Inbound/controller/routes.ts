@@ -84,11 +84,10 @@ export function registerRoutes(router: ApiRouter, c: Container) {
         return noContent();
     });
 
-    // Creating admins needs an admin session or the ADMIN_SIGNUP_KEY (x-admin-signup-key header).
+    // The first admin account can be created openly; after that only an admin can add admins.
     router.post("/users/signup/admin", async (req) => {
-        const signupKey = c.config.parsed().ADMIN_SIGNUP_KEY;
-        const hasKey = Boolean(signupKey) && req.headers.get("x-admin-signup-key") === signupKey;
-        if (!hasKey) isAdmin(req);
+        const users = await c.userQueryService.getUsers();
+        if (users.some((user) => user.role === Role.ADMIN)) isAdmin(req);
         const dto = validate(createUserSchema, { ...req.body, role: Role.ADMIN });
         await c.userCommandService.createUser(dto);
         return noContent();

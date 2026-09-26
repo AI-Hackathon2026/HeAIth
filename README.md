@@ -62,24 +62,31 @@ Requirements: Node.js 20+.
 
 ```bash
 npm install
-cp .env.example .env.local   # then fill in the values
+echo "GEMINI_API_KEY=your-key" > .env
 npm run dev                  # http://localhost:3000
 ```
 
-Sign in at `/admin/login` with `ADMIN_EMAIL` / `ADMIN_PASSWORD`. That account is created automatically on first start. Regular users sign up at `/login`.
+Regular users sign up at `/login`.
 
 ### Environment variables
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `TOKEN_SECRET` | In production | Signs login tokens. Use a long random string. |
-| `GEMINI_API_KEY` | For AI features | Chat and routine generation. Without it, those endpoints return 503. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Recommended | Admin account created on first start. |
-| `ADMIN_USERNAME` | No | Display name for that admin (default `admin`). |
-| `ADMIN_SIGNUP_KEY` | No | Allows `POST /api/users/signup/admin` with header `x-admin-signup-key`. |
-| `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` | No | `15m` or `1h`, and `7d`. |
-| `DATA_DIR` | No | Where `db.json` and uploads are written. Default `./data`, or `/tmp/heaith` on Vercel. |
-| `EMAIL_USER`, `EMAIL_PASSWORD` | No | Gmail SMTP for notification emails. Emails are only logged when unset. |
+The app reads a single variable from `.env`:
+
+| Variable | Purpose |
+|---|---|
+| `GEMINI_API_KEY` | Google Gemini key for chat and routine generation. Without it, those endpoints return 503 and everything else keeps working. |
+
+No AWS, database, Redis, email or OAuth settings are needed. Login tokens are signed with a built-in secret. Access tokens last 1 hour and refresh tokens 7 days.
+
+### Admin account
+
+The first admin is created through the API; after that, only a signed-in admin can create more:
+
+```bash
+curl -X POST http://localhost:3000/api/users/signup/admin   -H "Content-Type: application/json"   -d '{"email":"admin@example.com","username":"admin","password":"choose-a-password"}'
+```
+
+Then sign in at `/admin/login`.
 
 ## Data storage
 
@@ -91,15 +98,15 @@ To reset all data, stop the app and delete `data/db.json`.
 
 - PDFs in `public/documents/` are served as static files, which the admin viewer opens directly.
 - Their page text is stored in `data/documents/*.json` and searched to ground chat answers and routine reports. After adding or replacing a PDF there, run `npm run index:documents` and commit the result.
-- PDFs uploaded through the admin portal are stored in `DATA_DIR/uploads/` and indexed the same way. If `GEMINI_API_KEY` is set, they are also pushed to a Gemini File Search store.
+- PDFs uploaded through the admin portal are stored in `data/uploads/` (`/tmp/heaith/uploads/` on Vercel) and indexed the same way. If `GEMINI_API_KEY` is set, they are also pushed to a Gemini File Search store.
 
 ## Deploying to Vercel
 
 1. Import the GitHub repository in Vercel. The framework is detected as Next.js, and no build settings need changing.
-2. Add the environment variables above; at minimum `TOKEN_SECRET`, `GEMINI_API_KEY`, `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+2. Add `GEMINI_API_KEY` under Settings → Environment Variables.
 3. Deploy.
 
-> **Vercel storage is temporary.** Serverless functions can only write to `/tmp`, which is per-instance and cleared when an instance is recycled. On Vercel, accounts, routines and chats written to the JSON file persist only for the life of an instance, and different instances do not share data. That is fine for demos and judging. For durable production data, run the app on a server with a persistent disk (`npm run build && npm start`, with `DATA_DIR` pointing at that disk). The bundled PDF, extracted text and Excel tables are part of the deployment and always available.
+> **Vercel storage is temporary.** Serverless functions can only write to `/tmp`, which is per-instance and cleared when an instance is recycled. On Vercel, accounts, routines and chats written to the JSON file persist only for the life of an instance, and different instances do not share data. That is fine for demos and judging. For durable production data, run the app on a server with a persistent disk (`npm run build && npm start`; data is written to `data/`). The bundled PDF, extracted text and Excel tables are part of the deployment and always available.
 
 Other Vercel limits: request bodies are capped at 4.5 MB, so large PDFs should be added to `public/documents/` in the repository rather than uploaded through the admin portal. API calls can run for up to 60 seconds, which is enough for routine generation.
 

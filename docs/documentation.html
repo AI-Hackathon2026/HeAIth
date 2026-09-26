@@ -105,12 +105,12 @@
   <tr><td><code>src/server/Inbound/</code></td><td><code>http/router.ts</code> (Express-style path matching), <code>http/api.handler.ts</code> (request parsing, error mapping), <code>controller/routes.ts</code> (all endpoints), <code>controller/_communication/request</code> (zod DTOs).</td></tr>
   <tr><td><code>src/server/application/</code></td><td><code>command/services</code>, <code>query/services</code>, entities, views, mappers, <code>port/</code> interfaces.</td></tr>
   <tr><td><code>src/server/outbound/</code></td><td><code>store/</code> (JSON file database), <code>repo/</code>, <code>chatbot/gemini.ts</code>, <code>data/knhanes.adapter.ts</code>, <code>documents/document.library.ts</code>, <code>managers/scrypt-hash.manager.ts</code>.</td></tr>
-  <tr><td><code>src/server/shared/</code></td><td>Domain enums, exceptions, KNHANES rate tables, routine-generation and nutrition utilities, token/cookie/email/config utilities.</td></tr>
+  <tr><td><code>src/server/shared/</code></td><td>Domain enums, exceptions, KNHANES rate tables, routine-generation and nutrition utilities, token/cookie/config utilities.</td></tr>
   <tr><td><code>scripts/</code></td><td><code>index-documents.ts</code> (PDF text extraction), <code>build-docs-pdf.mjs</code> (this document).</td></tr>
 </table>
 
 <h2>4. Data storage</h2>
-<p><code>JsonStore</code> (<code>src/server/outbound/store/json.store.ts</code>) keeps the whole dataset in one pretty-printed JSON file at <code>DATA_DIR/db.json</code>.</p>
+<p><code>JsonStore</code> (<code>src/server/outbound/store/json.store.ts</code>) keeps the whole dataset in one pretty-printed JSON file: <code>data/db.json</code> locally, <code>/tmp/heaith/db.json</code> on Vercel.</p>
 <ul>
   <li><b>Reads</b> return deep clones, so callers can never change stored data by accident.</li>
   <li><b>Writes</b> run synchronously: mutate in memory, write a temp file, then rename it over <code>db.json</code>. A crash cannot leave a half-written file, and a write cannot interleave with another request in the same process.</li>
@@ -136,14 +136,14 @@
   <tr><td>ragStores, settings</td><td>Gemini File Search store name; selected Gemini model</td></tr>
 </table>
 <p>Disease prevalence by exercise frequency (the v1 <code>DiseaseRateByExercise</code> table) was static seed data. It is now read directly from <code>src/server/shared/data/disease-rate.seed.ts</code>.</p>
-<div class="note warn"><b>Vercel persistence.</b> On Vercel the only writable location is <code>/tmp</code>, which belongs to a single function instance and is wiped when that instance is recycled. User data therefore lasts only for the life of an instance there. For persistent data, run <code>next start</code> on a host with a disk and set <code>DATA_DIR</code>.</div>
+<div class="note warn"><b>Vercel persistence.</b> On Vercel the only writable location is <code>/tmp</code>, which belongs to a single function instance and is wiped when that instance is recycled. User data therefore lasts only for the life of an instance there. For persistent data, run <code>next start</code> on a host with a disk; data is then written to <code>data/</code>.</div>
 
 <h2>5. Documents and statistics data</h2>
 <h3>PDF library</h3>
 <ul>
   <li><b>Bundled PDFs</b> live in <code>public/documents/</code> (currently <i>2024 국민건강통계.pdf</i>, 343 pages) and are served as static files.</li>
   <li><code>npm run index:documents</code> extracts each page's text with <code>unpdf</code> (pdf.js). It applies the same Korean text clean-up as v1 and writes <code>data/documents/&lt;name&gt;.json</code>: id (derived from the filename), public URL, and page texts, where page 1 is index 0.</li>
-  <li><b>Uploaded PDFs</b> (admin, <code>POST /api/files/upload</code>) are stored as <code>DATA_DIR/uploads/&lt;id&gt;.pdf</code> with a <code>.pages.json</code> text file beside them.</li>
+  <li><b>Uploaded PDFs</b> (admin, <code>POST /api/files/upload</code>) are stored as <code>data/uploads/&lt;id&gt;.pdf</code> (<code>/tmp/heaith/uploads</code> on Vercel) with a <code>.pages.json</code> text file beside them.</li>
   <li><code>DocumentLibrary</code> merges both sources. The admin PDF viewer asks <code>/api/files/download/:id</code> for a URL: the static file for bundled PDFs, or <code>/api/files/raw/:id</code> for uploads.</li>
 </ul>
 <h3>KNHANES tables</h3>
@@ -189,12 +189,12 @@
 
 <h2>8. Authentication and security</h2>
 <ul>
-  <li>Sign-in issues a JWT access token (15 min) and refresh token (7 days) in HTTP-only, SameSite=Lax cookies (Secure in production), plus a readable <code>csrfValue</code> cookie. The client retries once through <code>PATCH /api/auth/refresh</code> when a token expires.</li>
+  <li>Sign-in issues a JWT access token (1 hour) and refresh token (7 days), signed with a built-in secret, in HTTP-only, SameSite=Lax cookies (Secure in production), plus a readable <code>csrfValue</code> cookie. The client retries once through <code>PATCH /api/auth/refresh</code> when a token expires.</li>
   <li>Refresh tokens are stored hashed and rotated on every refresh. Sign-out clears them.</li>
   <li>Passwords are hashed with scrypt (random 16-byte salt, 64-byte key, timing-safe comparison). v1 used reversible AES encryption.</li>
-  <li>Roles: USER and ADMIN. File management, user listing and user deletion require ADMIN. Creating an admin needs an admin session or the <code>ADMIN_SIGNUP_KEY</code> header. The first admin comes from <code>ADMIN_EMAIL</code>/<code>ADMIN_PASSWORD</code>.</li>
+  <li>Roles: USER and ADMIN. File management, user listing and user deletion require ADMIN. The first admin account can be created openly through <code>POST /api/users/signup/admin</code>; after that, creating an admin requires an admin session.</li>
   <li>Chats are owner-checked on read, update, delete and when sending chatbot messages.</li>
-  <li>Error handling: business errors return their status code and message. Missing resources return 404 and unique conflicts 409. Unexpected errors return a generic 500, and are emailed to <code>EMAIL_USER</code> when SMTP is configured.</li>
+  <li>Error handling: business errors return their status code and message. Missing resources return 404 and unique conflicts 409. Unexpected errors are logged and return a generic 500.</li>
 </ul>
 
 <h2 class="page-break">9. API reference</h2>
@@ -203,12 +203,12 @@
 <table>
   <tr><th>Method &amp; path</th><th>Access</th><th>Request → response</th></tr>
   <tr><td>POST /auth/signin</td><td>Public</td><td>{email, password} → {message, username, role}; sets cookies</td></tr>
-  <tr><td>POST /auth/signup</td><td>Public</td><td>{email, username, password} → {message, role}; sends notification emails if SMTP is set</td></tr>
+  <tr><td>POST /auth/signup</td><td>Public</td><td>{email, username, password} → {message, role}</td></tr>
   <tr><td>PATCH /auth/refresh</td><td>Refresh cookie</td><td>→ {message}; rotates cookies</td></tr>
   <tr><td>DELETE /auth/signout</td><td>Public</td><td>→ {message}; clears cookies</td></tr>
   <tr><td>POST /auth/check-email</td><td>Public</td><td>{email} → 200 if an account exists, 404 otherwise</td></tr>
   <tr><td>POST /users/signup/user</td><td>Public</td><td>{email, username, password} → 204</td></tr>
-  <tr><td>POST /users/signup/admin</td><td>Admin or key</td><td>{email, username, password} → 204</td></tr>
+  <tr><td>POST /users/signup/admin</td><td>Open until the first admin exists, then Admin</td><td>{email, username, password} → 204</td></tr>
   <tr><td>GET /users</td><td>Admin</td><td>→ [{id, email, username, role, createdAt, updatedAt}]</td></tr>
   <tr><td>DELETE /users/:userId</td><td>Admin</td><td>→ 204 (cascades all of the user's data)</td></tr>
   <tr><td>GET /users/me/character</td><td>Auth</td><td>→ {level, xp, xpInLevel, xpToNext, heroStyle, stage{key,name,emoji}, totalCompletions}</td></tr>
@@ -266,20 +266,15 @@
 </table>
 
 <h2>10. Configuration</h2>
+<p>The app reads one environment variable, from <code>.env</code> locally or from the Vercel project settings. No AWS, database, Redis, email or OAuth credentials are needed. The token secret and lifetimes (access 1 hour, refresh 7 days) are built into <code>config.util.ts</code>.</p>
 <table>
   <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
-  <tr><td>TOKEN_SECRET</td><td>dev-only value</td><td>JWT signing secret; required in production</td></tr>
   <tr><td>GEMINI_API_KEY</td><td>—</td><td>Enables AI features</td></tr>
-  <tr><td>ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_USERNAME</td><td>— / — / admin</td><td>First admin account, created on start-up</td></tr>
-  <tr><td>ADMIN_SIGNUP_KEY</td><td>—</td><td>Allows creating further admins through the API</td></tr>
-  <tr><td>ACCESS_TOKEN_EXPIRES_IN / REFRESH_TOKEN_EXPIRES_IN</td><td>15m / 7d</td><td>Token lifetimes</td></tr>
-  <tr><td>DATA_DIR</td><td>./data, or /tmp/heaith on Vercel</td><td>Location of db.json and uploads</td></tr>
-  <tr><td>EMAIL_USER / EMAIL_PASSWORD</td><td>—</td><td>Gmail SMTP for notifications</td></tr>
 </table>
 
 <h2>11. Running and deploying</h2>
 <pre>npm install
-cp .env.example .env.local     # fill in values
+echo GEMINI_API_KEY=... &gt; .env
 npm run dev                    # http://localhost:3000
 
 npm run build &amp;&amp; npm start     # production server
