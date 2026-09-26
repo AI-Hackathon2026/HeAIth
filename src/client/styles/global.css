@@ -314,6 +314,54 @@ button {
   justify-content: center;
 }
 
+.landing-scroll-arrow {
+  position: fixed;
+  left: 50%;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-size: 2.25rem;
+  cursor: pointer;
+  transform: translateX(-50%);
+  animation: landing-arrow-blink 1.4s ease-in-out infinite;
+}
+
+.landing-scroll-arrow--down {
+  bottom: 1.5rem;
+}
+
+.landing-scroll-arrow--up {
+  top: 1.5rem;
+}
+
+.landing-scroll-arrow:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+@keyframes landing-arrow-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-scroll-arrow {
+    animation: none;
+  }
+}
+
 .landing-scroll-nav {
   position: fixed;
   right: 1.25rem;
