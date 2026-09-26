@@ -128,13 +128,18 @@ export function HomePage() {
         {page === 0 && (
           <section className="landing-hero landing-panel">
             <div className="landing-hero-content">
+              <span className="landing-badge">Health + AI Platform</span>
               <h1 className="landing-title">
                 <HeAIthLogo size="lg" />
               </h1>
               <p className="landing-tagline">AI가 만드는 건강의 미래</p>
+              <p className="landing-desc">
+                HeAIth는 국민건강통계 데이터를 기반으로 <br />
+                개인 맞춤형 건강 루틴과 AI 상담을 제공합니다.
+              </p>
               <div className="landing-hero-actions">
                 <Link to="/login" className="primary-btn landing-cta-primary">
-                  로그인
+                  무료로 시작하기
                 </Link>
                 <button
                   type="button"
@@ -160,6 +165,10 @@ export function HomePage() {
 
         {page === 1 && (
           <section className="landing-section landing-video landing-panel">
+            <h2 className="landing-section-title">HeAIth 소개</h2>
+            <p className="landing-section-subtitle">
+              맞춤 건강 루틴과 AI 상담이 어떻게 동작하는지 확인해 보세요
+            </p>
             <div className="landing-video-wrap">
               <video
                 ref={featureVideoRef}
@@ -176,27 +185,6 @@ export function HomePage() {
           </section>
         )}
       </div>
-
-      {page === 0 && (
-        <button
-          type="button"
-          className="landing-scroll-arrow landing-scroll-arrow--down"
-          aria-label="소개 영상으로 이동"
-          onClick={() => goToPage(1)}
-        >
-          <i className="ti ti-chevron-down" aria-hidden />
-        </button>
-      )}
-      {page === 1 && (
-        <button
-          type="button"
-          className="landing-scroll-arrow landing-scroll-arrow--up"
-          aria-label="메인으로 이동"
-          onClick={() => goToPage(0)}
-        >
-          <i className="ti ti-chevron-up" aria-hidden />
-        </button>
-      )}
 
       <nav className="landing-scroll-nav" aria-label="페이지 이동">
         {PAGE_LABELS.map((label, index) => (
