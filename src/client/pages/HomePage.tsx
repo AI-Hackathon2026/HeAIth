@@ -15,7 +15,9 @@ export function HomePage() {
   const [fade, setFade] = useState<FadePhase>("in");
   const locked = useRef(false);
   const touchStartY = useRef(0);
+  const touchStartEdges = useRef({ atTop: true, atBottom: true });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const featureVideoRef = useRef<HTMLVideoElement>(null);
 
   const goToPage = useCallback(
@@ -35,6 +37,7 @@ export function HomePage() {
       window.setTimeout(() => {
         setPage(target);
         setFade("in");
+        pageRef.current?.scrollTo({ top: 0 });
 
         window.setTimeout(() => {
           setFade("steady");
@@ -60,6 +63,8 @@ export function HomePage() {
 
     function onWheel(event: WheelEvent) {
       if (Math.abs(event.deltaY) < WHEEL_THRESHOLD) return;
+      // On short screens a slide can be taller than the viewport: scroll it first.
+      if (!locked.current && canScrollSlide(event.deltaY > 0 ? 1 : -1)) return;
 
       if (locked.current) {
         event.preventDefault();
@@ -103,15 +108,31 @@ export function HomePage() {
     video.currentTime = 0;
   }, [page]);
 
+  /** True while the current slide still has content to scroll in `direction` (1 = down). */
+  function canScrollSlide(direction: 1 | -1) {
+    const el = pageRef.current;
+    if (!el) return false;
+    return direction > 0
+      ? el.scrollTop + el.clientHeight < el.scrollHeight - 2
+      : el.scrollTop > 2;
+  }
+
   function handleTouchStart(event: React.TouchEvent) {
     touchStartY.current = event.touches[0]?.clientY ?? 0;
+    touchStartEdges.current = {
+      atTop: !canScrollSlide(-1),
+      atBottom: !canScrollSlide(1),
+    };
   }
 
   function handleTouchEnd(event: React.TouchEvent) {
     const endY = event.changedTouches[0]?.clientY ?? 0;
     const delta = touchStartY.current - endY;
     if (Math.abs(delta) < 56) return;
-    goToPage(delta > 0 ? page + 1 : page - 1);
+    // Only change slides once the swipe starts from the slide's top/bottom edge,
+    // so a slide taller than the screen can be scrolled normally first.
+    if (delta > 0 && touchStartEdges.current.atBottom) goToPage(page + 1);
+    if (delta < 0 && touchStartEdges.current.atTop) goToPage(page - 1);
   }
 
   return (
@@ -122,6 +143,7 @@ export function HomePage() {
       onTouchEnd={handleTouchEnd}
     >
       <div
+        ref={pageRef}
         className={`landing-page landing-page--${fade}`}
         aria-live="polite"
       >

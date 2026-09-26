@@ -9934,3 +9934,448 @@ button {
     font-size: 0.875rem;
   }
 }
+/* ══════════════════════════════════════════════════════════════════
+   Responsive layout — phones (320px+), tablets and landscape phones.
+   Kept at the end of the file so it layers over the component rules.
+   ══════════════════════════════════════════════════════════════════ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+/* Decorative glows and orbs must never create sideways scrolling. */
+.main-layout,
+.health-status-gate,
+.auth-split,
+.landing-scroll,
+.routine-generating-overlay,
+.routine-ready-card,
+.signup-success {
+  overflow-x: clip;
+}
+
+.main-layout {
+  min-height: 100dvh;
+}
+
+/* Long words (emails, file names, food names) wrap instead of overflowing. */
+.user-name,
+.bv-filename,
+.file-card-name,
+.routine-tracker-item-title,
+.routine-nutrition-food-name,
+.routine-v2-task-name,
+.routine-chat-bubble,
+.markdown-content {
+  overflow-wrap: anywhere;
+}
+
+/* Viewport-height limits follow the visible area on mobile browsers. */
+.chat-popup-panel,
+.chat-popup-panel--routine {
+  height: min(88dvh, 720px);
+}
+
+.routine-v2-sheet {
+  max-height: 80dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.routine-info-modal {
+  max-height: 75dvh;
+}
+
+.hero-avatar-picker-card {
+  max-height: 92dvh;
+}
+
+/* ── Tablets (portrait and landscape) ── */
+@media (max-width: 1024px) {
+  .admin-content {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .routine-page--wide {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+/* ── Small tablets and large phones ── */
+@media (max-width: 768px) {
+  /* Inputs of 16px+ stop iOS Safari from zooming in on focus. */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+
+  .main-header {
+    padding: 0.6rem 1rem;
+    gap: 0.5rem;
+  }
+
+  .main-user {
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .user-name {
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-upload-btn {
+    justify-content: center;
+  }
+
+  .routine-view-header-main,
+  .routine-character {
+    min-width: 0;
+  }
+
+  .routine-difficulty-dock-btn {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .routine-difficulty-dock {
+    justify-content: stretch;
+  }
+
+  .routine-projection-detail-actions {
+    flex-wrap: wrap;
+  }
+
+  .routine-projection-detail-actions > * {
+    flex: 1 1 8rem;
+  }
+
+  .hero-avatar-xp-row {
+    width: 100%;
+    max-width: 13.75rem;
+  }
+
+  /* Chat opens as a full-width bottom sheet. */
+  .chat-popup-overlay {
+    padding: 0;
+    place-items: end stretch;
+  }
+
+  .chat-popup-panel,
+  .chat-popup-panel--routine {
+    width: 100%;
+    max-width: 100%;
+    height: min(92dvh, 100%);
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .routine-info-modal {
+    max-height: 85dvh;
+  }
+
+  /* PDF viewer: wrap the controls and give the page more room. */
+  .bv-header {
+    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .bv-controls {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0));
+  }
+
+  .bv-scrubber-wrap {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .bv-viewport {
+    padding: 6px;
+  }
+
+  .landing-section-title {
+    font-size: 1.6rem;
+  }
+
+  .landing-video-wrap {
+    padding: 0;
+  }
+}
+
+/* ── Phones ── */
+@media (max-width: 480px) {
+  .landing-page {
+    padding: 0 0.85rem;
+  }
+
+  .landing-tagline {
+    font-size: 1.2rem;
+  }
+
+  .landing-desc {
+    font-size: 0.95rem;
+  }
+
+  .landing-hero {
+    gap: 1.5rem;
+  }
+
+  .landing-hero-visual {
+    min-height: 170px;
+    transform: scale(0.8);
+  }
+
+  .landing-hero-actions > * {
+    flex: 1 1 10rem;
+    text-align: center;
+  }
+
+  .landing-scroll-nav {
+    right: 0.35rem;
+  }
+
+  .landing-scroll-arrow--down {
+    bottom: max(0.75rem, env(safe-area-inset-bottom, 0));
+  }
+
+  .landing-scroll-arrow--up {
+    top: max(0.75rem, env(safe-area-inset-top, 0));
+  }
+
+  .auth-split {
+    padding: 0.75rem;
+    gap: 1rem;
+  }
+
+  .auth-split-brand {
+    padding: 0.5rem;
+  }
+
+  .auth-card,
+  .auth-card--glass {
+    padding: 1.5rem 1.1rem;
+  }
+
+  .auth-card h1 {
+    font-size: 1.4rem;
+  }
+
+  .health-form-page {
+    padding: 20px 16px 28px;
+  }
+
+  .health-form {
+    padding: 0 1rem 1rem;
+  }
+
+  .health-status-gate-header {
+    padding: 1.25rem 1rem 0.25rem;
+  }
+
+  .routine-page {
+    padding: 1rem 0.85rem 1.5rem;
+  }
+
+  .routine-exposure-row {
+    grid-template-columns: 4.75rem 1fr auto;
+    gap: 0.5rem;
+  }
+
+  .routine-exposure-value {
+    min-width: 3.5rem;
+  }
+
+  .health-dashboard-btn-row {
+    grid-template-columns: 1fr;
+  }
+
+  .health-ranking-hero {
+    gap: 0.85rem;
+    padding: 1rem;
+  }
+
+  .routine-view-hero,
+  .routine-view-panel--glass {
+    padding: 0.9rem;
+  }
+
+  .routine-projection-detail-overlay,
+  .routine-levelup-overlay {
+    padding: 1rem;
+  }
+
+  .routine-projection-detail-card {
+    padding: 1.4rem 1.1rem;
+  }
+
+  .routine-generating-overlay {
+    padding: 1rem;
+  }
+
+  .routine-generating-card,
+  .routine-ready-card {
+    padding: 1.6rem 1.2rem 1.35rem;
+  }
+
+  .routine-ready-hud-corner {
+    width: 36px;
+    height: 36px;
+  }
+
+  .routine-v2-sheet-header {
+    padding: 0.85rem 1rem 0.6rem;
+  }
+
+  .routine-v2-sheet-body {
+    padding: 0 1rem 1.5rem;
+  }
+
+  .routine-chat-bubble {
+    max-width: 85%;
+  }
+
+  .routine-chat-composer {
+    padding: 0.6rem 0.75rem 0.75rem;
+  }
+
+  .admin-content {
+    padding: 1.25rem 0.85rem;
+  }
+
+  .admin-file-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .file-card-actions {
+    flex-wrap: wrap;
+  }
+
+  .file-action-btn {
+    flex: 1 1 45%;
+  }
+
+  .hero-avatar-demo {
+    padding: 1rem;
+  }
+
+  .hero-avatar-lv-name {
+    min-width: 0;
+  }
+}
+
+/* ── Small phones (iPhone SE, compact Android) ── */
+@media (max-width: 360px) {
+  .main-brand-tagline,
+  .user-name {
+    display: none;
+  }
+
+  .main-header .ghost-btn {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .health-form-row--two,
+  .healthstatus-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .health-form-gender-btn {
+    padding: 12px 8px;
+  }
+
+  .routine-action-dock {
+    gap: 0.5rem;
+    padding: 0.65rem;
+  }
+
+  .routine-difficulty-card {
+    min-height: 0;
+  }
+
+  .admin-file-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-tabs button {
+    padding: 0.6rem 0.5rem;
+  }
+}
+
+/* ── Phones in landscape: little height, so drop decoration and let content scroll ── */
+@media (orientation: landscape) and (max-height: 500px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+    padding: 0.75rem 0 3rem;
+  }
+
+  .landing-hero-visual,
+  .auth-split-features {
+    display: none;
+  }
+
+  .landing-video.landing-panel {
+    padding: 2.75rem 0 0.75rem;
+  }
+
+  .landing-video-player {
+    max-height: calc(100dvh - 7rem);
+  }
+
+  .landing-section-title {
+    font-size: 1.35rem;
+  }
+
+  .auth-split {
+    grid-template-columns: 1fr 1.4fr;
+    min-height: 0;
+    padding: 0.75rem 1rem;
+  }
+
+  .auth-split-brand {
+    padding: 0;
+  }
+
+  .chat-popup-panel,
+  .chat-popup-panel--routine {
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .routine-v2-sheet,
+  .routine-info-modal,
+  .hero-avatar-picker-card {
+    max-height: 94dvh;
+  }
+
+  .routine-generating-card,
+  .routine-ready-card {
+    max-height: 100%;
+    overflow-y: auto;
+  }
+
+  /* Scale (not resize): the rings inside use fixed pixel insets. */
+  .routine-generating-visual,
+  .routine-ready-visual {
+    transform: scale(0.65);
+    margin-top: -1.25rem;
+    margin-bottom: -1.25rem;
+  }
+}
