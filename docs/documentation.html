@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HeAIth — Technical Documentation</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+  :root { --ink:#16202c; --muted:#5b6776; --line:#d9dee5; --accent:#0f6e6a; --soft:#eef4f4; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Malgun Gothic", "Noto Sans KR", sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.55; margin: 0; }
+  h1, h2, h3 { line-height: 1.25; color: var(--ink); }
+  h1 { font-size: 26pt; margin: 0 0 6px; }
+  h2 { font-size: 15pt; margin: 26px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--accent); break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 16px 0 6px; break-after: avoid; }
+  p { margin: 6px 0; }
+  code, pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: 9pt; }
+  code { background: var(--soft); padding: 1px 4px; border-radius: 3px; }
+  pre { background: #f6f8fa; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; break-inside: avoid; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 9.5pt; break-inside: auto; }
+  th, td { border: 1px solid var(--line); padding: 5px 7px; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-weight: 600; }
+  tr { break-inside: avoid; }
+  ul, ol { margin: 6px 0 6px 20px; padding: 0; }
+  li { margin: 2px 0; }
+  .cover { height: 250mm; display: flex; flex-direction: column; justify-content: center; break-after: page; }
+  .cover .tag { color: var(--accent); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 10pt; }
+  .cover p.lead { font-size: 13pt; color: var(--muted); max-width: 150mm; }
+  .cover .meta { margin-top: 30px; color: var(--muted); font-size: 10pt; }
+  .toc ol { columns: 2; }
+  .note { border-left: 4px solid var(--accent); background: var(--soft); padding: 8px 12px; margin: 10px 0; break-inside: avoid; }
+  .warn { border-left-color: #b4561d; background: #fbf1ea; }
+  .diagram { display: grid; gap: 8px; margin: 10px 0; break-inside: avoid; }
+  .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .box { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; background: #fff; font-size: 9.5pt; }
+  .box b { display: block; color: var(--accent); margin-bottom: 2px; }
+  .arrow { text-align: center; color: var(--muted); font-size: 9pt; }
+  .page-break { break-before: page; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="tag">Technical documentation</div>
+  <h1>HeAIth</h1>
+  <p class="lead">An AI health platform that turns a short questionnaire into a personalised weekly diet and exercise routine, grounded in Korea's 2024 national health statistics (국민건강통계).</p>
+  <div class="meta">Version 2.0 — single Next.js application with file-based storage<br>AI-Hackathon2026 · github.com/AI-Hackathon2026/HeAIth</div>
+</section>
+
+<section class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li>Overview</li>
+    <li>Architecture</li>
+    <li>Project layout</li>
+    <li>Data storage</li>
+    <li>Documents and statistics data</li>
+    <li>Core logic</li>
+    <li>AI pipelines</li>
+    <li>Authentication and security</li>
+    <li>API reference</li>
+    <li>Configuration</li>
+    <li>Running and deploying</li>
+    <li>Migration from v1 (Express + PostgreSQL)</li>
+  </ol>
+</section>
+
+<h2>1. Overview</h2>
+<p>HeAIth guides a user through four steps:</p>
+<ol>
+  <li><b>Check-in.</b> The user enters gender, age, height, weight and weekly drinking, smoking and exercise frequency.</li>
+  <li><b>Assessment.</b> The server computes BMI, exposure rates for six risk areas, an overall health score (0–100), and a ranking against users of the same age group and gender.</li>
+  <li><b>Routine.</b> The user picks a difficulty. Gemini generates a weekly plan with three meals per day (each food with calories) and exercises, plus a short summary and a Markdown report citing pages of the national statistics PDF.</li>
+  <li><b>Follow-through.</b> The user ticks off meals and exercises, earns XP to level up a hero avatar, and chats with an AI coach that can rewrite parts of the routine.</li>
+</ol>
+<p>Administrators manage the PDF library the AI reads from, browse documents in a page-flip viewer, and can query the KNHANES Excel tables directly.</p>
+
+<h2>2. Architecture</h2>
+<p>Everything runs in one Next.js 15 application. Browser pages and the JSON API share one origin, so authentication cookies are first-party and no CORS setup is needed.</p>
+<div class="diagram">
+  <div class="row">
+    <div class="box"><b>Browser</b>React 19 SPA (React Router), mounted client-side for every page URL by <code>src/app/[[...slug]]</code>.</div>
+    <div class="box"><b>/api/* route handler</b><code>src/app/api/[...path]/route.ts</code> — one Node.js serverless function.</div>
+    <div class="box"><b>Static files</b><code>public/</code> — icons, demo video, and PDFs in <code>public/documents</code>.</div>
+  </div>
+  <div class="arrow">▼ router → middlewares → handler → application services</div>
+  <div class="row">
+    <div class="box"><b>Inbound</b>ApiRouter, route table, auth middleware, zod request schemas, error mapping.</div>
+    <div class="box"><b>Application</b>Command and query services, entities, views, mappers; they depend only on ports (interfaces).</div>
+    <div class="box"><b>Outbound</b>JSON store and repositories, Gemini adapter, KNHANES Excel adapter, document library.</div>
+  </div>
+  <div class="arrow">▼</div>
+  <div class="row">
+    <div class="box"><b>data/db.json</b>All application records (JSON text file).</div>
+    <div class="box"><b>data/documents, data/knhanes</b>Extracted PDF page text; statistics Excel tables.</div>
+    <div class="box"><b>Google Gemini</b>Chat answers, routine generation and adjustment, optional File Search store.</div>
+  </div>
+</div>
+<p>The backend keeps the ports-and-adapters design of v1. Services receive repository interfaces through <code>src/server/container.ts</code>, so replacing PostgreSQL with a file only required new repository implementations. The business logic did not change.</p>
+
+<h2>3. Project layout</h2>
+<table>
+  <tr><th>Path</th><th>Contents</th></tr>
+  <tr><td><code>src/app/</code></td><td>Next.js entry points: root layout, catch-all page, web manifest, API route.</td></tr>
+  <tr><td><code>src/client/</code></td><td>Former Vite frontend: <code>pages/</code>, <code>components/</code> (routine, avatar, chat, PDF viewer, admin), <code>api/client.ts</code>, hooks, utils, <code>styles/global.css</code>.</td></tr>
+  <tr><td><code>src/server/Inbound/</code></td><td><code>http/router.ts</code> (Express-style path matching), <code>http/api.handler.ts</code> (request parsing, error mapping), <code>controller/routes.ts</code> (all endpoints), <code>controller/_communication/request</code> (zod DTOs).</td></tr>
+  <tr><td><code>src/server/application/</code></td><td><code>command/services</code>, <code>query/services</code>, entities, views, mappers, <code>port/</code> interfaces.</td></tr>
+  <tr><td><code>src/server/outbound/</code></td><td><code>store/</code> (JSON file database), <code>repo/</code>, <code>chatbot/gemini.ts</code>, <code>data/knhanes.adapter.ts</code>, <code>documents/document.library.ts</code>, <code>managers/scrypt-hash.manager.ts</code>.</td></tr>
+  <tr><td><code>src/server/shared/</code></td><td>Domain enums, exceptions, KNHANES rate tables, routine-generation and nutrition utilities, token/cookie/email/config utilities.</td></tr>
+  <tr><td><code>scripts/</code></td><td><code>index-documents.ts</code> (PDF text extraction), <code>build-docs-pdf.mjs</code> (this document).</td></tr>
+</table>
+
+<h2>4. Data storage</h2>
+<p><code>JsonStore</code> (<code>src/server/outbound/store/json.store.ts</code>) keeps the whole dataset in one pretty-printed JSON file at <code>DATA_DIR/db.json</code>.</p>
+<ul>
+  <li><b>Reads</b> return deep clones, so callers can never change stored data by accident.</li>
+  <li><b>Writes</b> run synchronously: mutate in memory, write a temp file, then rename it over <code>db.json</code>. A crash cannot leave a half-written file, and a write cannot interleave with another request in the same process.</li>
+  <li><b>Freshness:</b> the file's modification time is checked on every access, and the file is reloaded if another process changed it.</li>
+  <li><b>Relations:</b> the old foreign-key cascades are explicit helpers (<code>deleteUserCascade</code>, <code>deleteRoutineCascade</code>, <code>deleteChatCascade</code>). Unique constraints (email, one routine per user, one health profile per user) are checked in the repositories.</li>
+  <li><b>Transactions:</b> the <code>UnitOfWork</code> port is kept but runs the work directly. Each repository write is atomic on its own.</li>
+</ul>
+<h3>Collections</h3>
+<table>
+  <tr><th>Collection</th><th>Key fields</th></tr>
+  <tr><td>users</td><td>id, email (unique), username, password (scrypt hash), role (ADMIN/USER), refreshToken (hash)</td></tr>
+  <tr><td>healthStatuses</td><td>userId (unique), gender, age, height, weight, alcoholFreq, smokeFreq, exerciseFreq</td></tr>
+  <tr><td>healthRecords</td><td>userId (unique), bmi, exposureRates {DISEASE: %}, overallScore</td></tr>
+  <tr><td>routines</td><td>userId (unique), difficulty, summary, report, reportReadme (Markdown), isActive</td></tr>
+  <tr><td>dailyRoutines</td><td>routineId, dayOfWeek (unique per routine), nutritionSummaryId</td></tr>
+  <tr><td>nutritionPlans / nutritionFoodItems</td><td>meal per day (mealType, calories, progress) / food per meal (name, calories, sortOrder, progress)</td></tr>
+  <tr><td>nutritionSummaries</td><td>vitamin A/C/D, calcium, protein, carbohydrates, fat, fiber, sugar, sodium, cholesterol (%)</td></tr>
+  <tr><td>exercisePlans</td><td>dailyRoutineId, exercises {task, frequency}, progressPercentage</td></tr>
+  <tr><td>chats / messages</td><td>userId, title, routineId (routine-coach chats) / chatId, role (USER/AI), text</td></tr>
+  <tr><td>characterProgress</td><td>userId (unique), level, xp, stage, heroStyle, totalCompletions</td></tr>
+  <tr><td>planProgressEvents</td><td>userId + planId + progressPercentage (unique): records XP already granted</td></tr>
+  <tr><td>uploadedFiles, hiddenDocumentIds</td><td>PDFs uploaded at runtime; bundled PDFs an admin removed from the library</td></tr>
+  <tr><td>ragStores, settings</td><td>Gemini File Search store name; selected Gemini model</td></tr>
+</table>
+<p>Disease prevalence by exercise frequency (the v1 <code>DiseaseRateByExercise</code> table) was static seed data. It is now read directly from <code>src/server/shared/data/disease-rate.seed.ts</code>.</p>
+<div class="note warn"><b>Vercel persistence.</b> On Vercel the only writable location is <code>/tmp</code>, which belongs to a single function instance and is wiped when that instance is recycled. User data therefore lasts only for the life of an instance there. For persistent data, run <code>next start</code> on a host with a disk and set <code>DATA_DIR</code>.</div>
+
+<h2>5. Documents and statistics data</h2>
+<h3>PDF library</h3>
+<ul>
+  <li><b>Bundled PDFs</b> live in <code>public/documents/</code> (currently <i>2024 국민건강통계.pdf</i>, 343 pages) and are served as static files.</li>
+  <li><code>npm run index:documents</code> extracts each page's text with <code>unpdf</code> (pdf.js). It applies the same Korean text clean-up as v1 and writes <code>data/documents/&lt;name&gt;.json</code>: id (derived from the filename), public URL, and page texts, where page 1 is index 0.</li>
+  <li><b>Uploaded PDFs</b> (admin, <code>POST /api/files/upload</code>) are stored as <code>DATA_DIR/uploads/&lt;id&gt;.pdf</code> with a <code>.pages.json</code> text file beside them.</li>
+  <li><code>DocumentLibrary</code> merges both sources. The admin PDF viewer asks <code>/api/files/download/:id</code> for a URL: the static file for bundled PDFs, or <code>/api/files/raw/:id</code> for uploads.</li>
+</ul>
+<h3>KNHANES tables</h3>
+<p>The 28 Excel workbooks of the 2024 국민건강통계 are in <code>data/knhanes/</code>. <code>KnhanesAdapter</code> finds the 2024 column and the row matching a metric and optional filters (sex, age, income). Only bare <code>.xlsx</code> filenames inside that folder are accepted.</p>
+
+<h2>6. Core logic</h2>
+<h3>Health assessment</h3>
+<ul>
+  <li>BMI = weight(kg) / height(m)². Obesity status: ≥ 25 obese, &lt; 18.5 underweight.</li>
+  <li>Age groups: 19-29, 30-39, 40-49, 50-59, 60-69, 70+.</li>
+  <li>Exposure rates (%) use 2024 KNHANES prevalence for the user's gender and age group. OBESITY is the full rate if BMI ≥ 25, otherwise 30% of it. HYPERTENSION, DIABETES and STRESS use the group rate. SMOKING is 100 if the user smokes at all. ALCOHOL is 100 at 3+ times a week, 50 at 1–2, else 0.</li>
+  <li>Overall score = 100 − Σ(rate × weight), with weights obesity 0.25, hypertension 0.25, diabetes 0.20, smoking 0.15, alcohol 0.10, stress 0.05.</li>
+  <li>Ranking compares the score with every stored user of the same gender and age group. With no peers it is marked <i>estimated</i>.</li>
+</ul>
+<h3>Projections</h3>
+<p>For a disease, the projected rate at difficulty d is current × rate(target days) / rate(current days). Target days are EASY 2, MODERATE 5 and HARD 7 days a week. Exercise frequency is snapped to the buckets 0, 1, 2, 3, 5 and 7.</p>
+<h3>Progress and gamification</h3>
+<ul>
+  <li>Food items, meals and exercises each have a progress value from 0 to 100; 100 means completed. A meal's progress is the aggregate of its food items.</li>
+  <li>Each first completion of a plan item grants 25 XP. <code>planProgressEvents</code> prevents granting the same item twice.</li>
+  <li>Level = floor(xp / 100) + 1, capped at 10. Stages: SPROUT (1–2), GROWTH (3–4), SKILLED (5–7), CHAMPION (8–9), MASTER (10). Level-ups are reported in the response so the UI can celebrate.</li>
+  <li>Daily nutrition composition is computed on the server from the meal foods; Gemini is never asked for percentages.</li>
+</ul>
+
+<h2>7. AI pipelines</h2>
+<h3>Health Q&amp;A chat (<code>POST /api/chatbot</code>)</h3>
+<ol>
+  <li>The question is reduced to a primary topic and expanded with Korean synonyms (e.g. 만성질병 ↔ 만성질환, 비만 ↔ 체중/BMI).</li>
+  <li>Every page of every library document that contains any term is scored. Term matches and statistics markers such as 유병률 or % raise the score; tables of contents and very short pages lower it. The top 6 pages are kept, 2,500 characters each.</li>
+  <li>With matches, Gemini answers in Korean (해요체) from that context and cites file and page. With none, it falls back to the Gemini File Search store, if one exists, or to a plain answer.</li>
+  <li>The question and answer are saved as messages of the chat.</li>
+</ol>
+<h3>Routine generation (<code>POST /api/routines/generate</code>)</h3>
+<ol>
+  <li>Search terms are built from the user's highest exposure risks, and the top 10 matching PDF pages are retrieved.</li>
+  <li>A structured prompt with profile, risks and difficulty asks Gemini for JSON only: <code>report</code>, <code>reportReadme</code> and a <code>routine</code> entry per day with distinct menus and realistic per-food calories.</li>
+  <li>The JSON is validated and normalised (three meals per day, calories summed). If the README is missing, a fallback one is written. The result is stored as routine → daily routines → meal plans → food items, plus exercise plans and nutrition summaries.</li>
+</ol>
+<h3>Routine coach (<code>POST /api/routines/chat/:chatId/message</code>)</h3>
+<p>The current weekly routine is sent as JSON with the user's request. Gemini returns <code>userMessage</code>, an optional new <code>summary</code>, and <code>dayChanges</code>. Changed days have their meals merged (unchanged meals are kept) or their exercises replaced, and nutrition summaries are recomputed. Plain questions produce no changes.</p>
+<h3>Models</h3>
+<p>The default model is <code>gemini-2.5-flash</code>. <code>PATCH /api/chatbot/model</code> switches between the supported Gemini versions, and the choice is saved in <code>settings.geminiModel</code>. Without <code>GEMINI_API_KEY</code>, AI endpoints return 503 while the rest of the app keeps working.</p>
+
+<h2>8. Authentication and security</h2>
+<ul>
+  <li>Sign-in issues a JWT access token (15 min) and refresh token (7 days) in HTTP-only, SameSite=Lax cookies (Secure in production), plus a readable <code>csrfValue</code> cookie. The client retries once through <code>PATCH /api/auth/refresh</code> when a token expires.</li>
+  <li>Refresh tokens are stored hashed and rotated on every refresh. Sign-out clears them.</li>
+  <li>Passwords are hashed with scrypt (random 16-byte salt, 64-byte key, timing-safe comparison). v1 used reversible AES encryption.</li>
+  <li>Roles: USER and ADMIN. File management, user listing and user deletion require ADMIN. Creating an admin needs an admin session or the <code>ADMIN_SIGNUP_KEY</code> header. The first admin comes from <code>ADMIN_EMAIL</code>/<code>ADMIN_PASSWORD</code>.</li>
+  <li>Chats are owner-checked on read, update, delete and when sending chatbot messages.</li>
+  <li>Error handling: business errors return their status code and message. Missing resources return 404 and unique conflicts 409. Unexpected errors return a generic 500, and are emailed to <code>EMAIL_USER</code> when SMTP is configured.</li>
+</ul>
+
+<h2 class="page-break">9. API reference</h2>
+<p>All paths are under <code>/api</code>. Bodies are JSON unless noted. "Auth" means a signed-in user; "Admin" means role ADMIN.</p>
+<h3>Auth and users</h3>
+<table>
+  <tr><th>Method &amp; path</th><th>Access</th><th>Request → response</th></tr>
+  <tr><td>POST /auth/signin</td><td>Public</td><td>{email, password} → {message, username, role}; sets cookies</td></tr>
+  <tr><td>POST /auth/signup</td><td>Public</td><td>{email, username, password} → {message, role}; sends notification emails if SMTP is set</td></tr>
+  <tr><td>PATCH /auth/refresh</td><td>Refresh cookie</td><td>→ {message}; rotates cookies</td></tr>
+  <tr><td>DELETE /auth/signout</td><td>Public</td><td>→ {message}; clears cookies</td></tr>
+  <tr><td>POST /auth/check-email</td><td>Public</td><td>{email} → 200 if an account exists, 404 otherwise</td></tr>
+  <tr><td>POST /users/signup/user</td><td>Public</td><td>{email, username, password} → 204</td></tr>
+  <tr><td>POST /users/signup/admin</td><td>Admin or key</td><td>{email, username, password} → 204</td></tr>
+  <tr><td>GET /users</td><td>Admin</td><td>→ [{id, email, username, role, createdAt, updatedAt}]</td></tr>
+  <tr><td>DELETE /users/:userId</td><td>Admin</td><td>→ 204 (cascades all of the user's data)</td></tr>
+  <tr><td>GET /users/me/character</td><td>Auth</td><td>→ {level, xp, xpInLevel, xpToNext, heroStyle, stage{key,name,emoji}, totalCompletions}</td></tr>
+  <tr><td>PATCH /users/me/character</td><td>Auth</td><td>{heroStyle: IRON|DARK|SPIDER} → character progress</td></tr>
+</table>
+<h3>Health</h3>
+<table>
+  <tr><th>Method &amp; path</th><th>Access</th><th>Request → response</th></tr>
+  <tr><td>POST /healthstatus</td><td>Auth</td><td>{gender, age 1–100, height, weight, alcoholFreq, smokeFreq, exerciseFreq (0–7)} → 201 assessment {bmi, obesity{status,label,guides}, lifestyle{guides}}</td></tr>
+  <tr><td>GET /healthstatus</td><td>Auth</td><td>→ stored health profile (404 if none)</td></tr>
+  <tr><td>PATCH /healthstatus/:id</td><td>Auth</td><td>same body → assessment; recomputes the health record</td></tr>
+  <tr><td>GET /health-records/me</td><td>Auth</td><td>→ {bmi, overallScore, exposureRates, healthRanking, formatted{overallScore, healthRanking, exposureRisks}}</td></tr>
+  <tr><td>GET /health-records/me/projection?disease=</td><td>Auth</td><td>→ {current, EASY, MODERATE, HARD, formatted{projections[]}}</td></tr>
+</table>
+<h3>Routines</h3>
+<table>
+  <tr><th>Method &amp; path</th><th>Access</th><th>Request → response</th></tr>
+  <tr><td>GET /routines/me</td><td>Auth</td><td>→ {summary, reportReadme, difficulty, days[{dayOfWeek, nutritionPlans[{foodItems[]}], exercisePlans[], nutritionSummary, averageCalories, isCompleted}], characterProgress}</td></tr>
+  <tr><td>POST /routines/generate</td><td>Auth</td><td>{difficulty: EASY|MODERATE|HARD} → 201 generated routine payload</td></tr>
+  <tr><td>PUT /routines/me</td><td>Auth</td><td>{difficulty} → replaces the routine with a new one</td></tr>
+  <tr><td>DELETE /routines/me</td><td>Auth</td><td>→ 204</td></tr>
+  <tr><td>PATCH /routines/exercise-plans/:id/progress</td><td>Auth</td><td>{isCompleted} or {progressionBar 0–100} → {id, isCompleted, progressionBar, leveledUp, previousLevel, characterProgress}</td></tr>
+  <tr><td>PATCH /routines/nutrition-plans/:id/progress</td><td>Auth</td><td>same as above, for a whole meal</td></tr>
+  <tr><td>PATCH /routines/nutrition-food-items/:id/progress</td><td>Auth</td><td>same as above, for one food; updates the meal's aggregate</td></tr>
+  <tr><td>POST /routines/me/chat</td><td>Auth</td><td>→ {chatId, routineId} (creates the coach chat if needed)</td></tr>
+  <tr><td>POST /routines/chat/:chatId/message</td><td>Auth</td><td>{text} → {aiResponse, routineUpdated, routine?}</td></tr>
+</table>
+<h3>Chat and chatbot</h3>
+<table>
+  <tr><th>Method &amp; path</th><th>Access</th><th>Request → response</th></tr>
+  <tr><td>GET / POST /chat</td><td>Auth</td><td>list chats / {title} → created chat (also available as /chats)</td></tr>
+  <tr><td>GET /chat/:chatId</td><td>Owner</td><td>→ {id, title, messages[{id, from, text, createdAt}]}</td></tr>
+  <tr><td>GET /chat/:chatId/messages</td><td>Owner</td><td>→ [{id, role, text, createdAt}]</td></tr>
+  <tr><td>PATCH / DELETE /chat/:chatId</td><td>Owner</td><td>{title} → updated / 204</td></tr>
+  <tr><td>PATCH / DELETE /chat/:chatId/messages/:messageId</td><td>Owner</td><td>{text} → updated / 204</td></tr>
+  <tr><td>POST /chatbot</td><td>Owner of chat</td><td>{chatId, text} → answer string</td></tr>
+  <tr><td>POST /chatbot/embedding</td><td>Auth</td><td>{text} → Gemini embedding vectors</td></tr>
+  <tr><td>GET /chatbot/available_models</td><td>Auth</td><td>→ string[]</td></tr>
+  <tr><td>GET / PATCH /chatbot/model</td><td>Auth</td><td>→ "You are using …" / {model} → {message}</td></tr>
+</table>
+<h3>KNHANES and files</h3>
+<table>
+  <tr><th>Method &amp; path</th><th>Access</th><th>Request → response</th></tr>
+  <tr><td>GET /knhanes/files</td><td>Auth</td><td>→ {files: string[]}</td></tr>
+  <tr><td>POST /knhanes/query</td><td>Auth</td><td>{fileName, metric, filters?{sex,age,income}, userValue?} → {metricName, nationalAverage, source, userDeviation?}</td></tr>
+  <tr><td>POST /knhanes/ground</td><td>Auth</td><td>{sex?, age?, income?} → findings about meal skipping and nutrient intake</td></tr>
+  <tr><td>GET /files</td><td>Admin</td><td>→ [{id, filename, createdAt}]</td></tr>
+  <tr><td>POST /files/upload</td><td>Admin</td><td>multipart, field <code>pdf</code> (up to 4.5 MB on Vercel) → 204</td></tr>
+  <tr><td>GET /files/search?filename= · /files/find?keyword=</td><td>Admin</td><td>filename match / pages containing a keyword</td></tr>
+  <tr><td>GET /files/:id</td><td>Admin</td><td>→ {id, filename, createdAt, content: string[] (per page)}</td></tr>
+  <tr><td>GET /files/download/:id</td><td>Admin</td><td>→ {url, filename, expiresIn}</td></tr>
+  <tr><td>GET /files/raw/:id</td><td>Admin</td><td>→ application/pdf (uploads) or redirect (bundled)</td></tr>
+  <tr><td>DELETE /files/:id</td><td>Admin</td><td>→ 204 (bundled PDFs are hidden, uploads are deleted)</td></tr>
+  <tr><td>GET / DELETE /files/rag/store, /files/rag/documents</td><td>Admin</td><td>inspect or delete the Gemini File Search store and its documents</td></tr>
+</table>
+
+<h2>10. Configuration</h2>
+<table>
+  <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td>TOKEN_SECRET</td><td>dev-only value</td><td>JWT signing secret; required in production</td></tr>
+  <tr><td>GEMINI_API_KEY</td><td>—</td><td>Enables AI features</td></tr>
+  <tr><td>ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_USERNAME</td><td>— / — / admin</td><td>First admin account, created on start-up</td></tr>
+  <tr><td>ADMIN_SIGNUP_KEY</td><td>—</td><td>Allows creating further admins through the API</td></tr>
+  <tr><td>ACCESS_TOKEN_EXPIRES_IN / REFRESH_TOKEN_EXPIRES_IN</td><td>15m / 7d</td><td>Token lifetimes</td></tr>
+  <tr><td>DATA_DIR</td><td>./data, or /tmp/heaith on Vercel</td><td>Location of db.json and uploads</td></tr>
+  <tr><td>EMAIL_USER / EMAIL_PASSWORD</td><td>—</td><td>Gmail SMTP for notifications</td></tr>
+</table>
+
+<h2>11. Running and deploying</h2>
+<pre>npm install
+cp .env.example .env.local     # fill in values
+npm run dev                    # http://localhost:3000
+
+npm run build &amp;&amp; npm start     # production server
+npm run index:documents        # after changing public/documents
+npm run docs:pdf               # rebuild this document</pre>
+<p><b>Vercel:</b> import the repository, set the environment variables, and deploy. No build settings need changing. The API route has a 60-second limit, which covers routine generation. The bundled PDF text and Excel tables are traced into the function through <code>outputFileTracingIncludes</code> in <code>next.config.ts</code>.</p>
+
+<h2>12. Migration from v1</h2>
+<table>
+  <tr><th>v1 (two repositories)</th><th>v2 (this application)</th></tr>
+  <tr><td>Vite + React SPA on Vercel, proxying /api to an Express server on EC2</td><td>Next.js serves the same SPA and the API from one origin</td></tr>
+  <tr><td>Express controllers and routes</td><td><code>ApiRouter</code> + <code>routes.ts</code>; same paths, status codes and response shapes</td></tr>
+  <tr><td>PostgreSQL through Prisma (15 models)</td><td>JSON text file with the same collections</td></tr>
+  <tr><td>PDFs in S3, page text in the Content table</td><td>PDFs in <code>public/documents</code>, page text in <code>data/documents</code></td></tr>
+  <tr><td>Redis, AWS SDK, multer, swagger, passport</td><td>Removed (unused or replaced)</td></tr>
+  <tr><td>AES-encrypted passwords</td><td>scrypt hashes</td></tr>
+  <tr><td>Open admin sign-up and user list</td><td>Admin-only, with an env-based bootstrap admin</td></tr>
+</table>
+<p>The application layer (services, entities, routine generation, nutrition and scoring utilities) was carried over unchanged apart from import paths.</p>
+
+</body>
+</html>
