@@ -34,6 +34,8 @@ export class DocumentLibrary {
         private readonly _store: JsonStore,
         private readonly _bundledDir: string,
         private readonly _uploadDir: string,
+        /** public/documents, where the bundled PDFs themselves live. */
+        private readonly _publicPdfDir: string,
     ) {}
 
     list(): DocumentMeta[] {
@@ -82,6 +84,15 @@ export class DocumentLibrary {
         if (bundled) return { kind: "url", url: bundled.url };
         const filePath = this._uploadedPdfPath(id);
         return fs.existsSync(filePath) ? { kind: "file", filePath } : null;
+    }
+
+    /** Raw bytes of a document's PDF, or null if the file is missing. */
+    readPdf(id: string): Buffer | null {
+        const bundled = this._loadBundled().get(id);
+        const filePath = bundled
+            ? path.join(this._publicPdfDir, bundled.filename)
+            : this._uploadedPdfPath(id);
+        return fs.existsSync(filePath) ? fs.readFileSync(filePath) : null;
     }
 
     isBundled(id: string): boolean {

@@ -4,7 +4,7 @@
   "private": true,
   "description": "HeAIth — AI health routine and consultation platform (Next.js full-stack app)",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "type:check": "tsc --noEmit",

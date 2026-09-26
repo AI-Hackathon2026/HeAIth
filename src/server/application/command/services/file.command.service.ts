@@ -88,6 +88,14 @@ export class FileCommandService {
         }
     }
 
+    /** Sends one stored PDF to the Gemini File Search store (the admin "embed" action). */
+    async embedDocument(filename: string, pdf: Buffer): Promise<void> {
+        if (!this._ai.isConfigured()) {
+            throw new BusinessException({ type: BusinessExceptionType.AI_NOT_CONFIGURED });
+        }
+        await this._uploadToGeminiRagStore([new FileEntity({ filename, pdf, contentVos: [] })]);
+    }
+
     async deleteRagDocument(documentName: string): Promise<void> {
         await this._ai.deleteStoreDocument(documentName);
     }

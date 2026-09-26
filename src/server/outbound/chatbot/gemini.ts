@@ -155,9 +155,13 @@ export class Gemini implements IChatbot {
         const results: Array<{ name: string; displayName: string }> = [];
         const pager = await this._ai.fileSearchStores.documents.list({ parent: storeName });
         for await (const doc of pager) {
+            // displayName is an ASCII-safe copy; report the original (e.g. Korean) filename.
+            const original = (doc.customMetadata ?? []).find(
+                (meta: { key?: string }) => meta.key === "originalFilename",
+            )?.stringValue;
             results.push({
                 name: doc.name ?? "",
-                displayName: doc.displayName ?? "",
+                displayName: original ?? doc.displayName ?? "",
             });
         }
         return results;

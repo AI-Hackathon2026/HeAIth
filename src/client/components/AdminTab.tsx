@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api, withAuthRetry } from "../api/client";
-import { PdfBookViewer } from "./PdfBookViewer";
+import { PdfViewerPageLoading } from "./PdfViewerPageLoading";
 import { resolvePdfFileId, resolvePdfFileName } from "../types";
 import type { EmbeddingInfo, PdfFile } from "../types";
+
+// pdf.js is large; load the viewer only when an admin opens a PDF.
+const PdfBookViewer = lazy(() =>
+  import("./PdfBookViewer").then((module) => ({ default: module.PdfBookViewer })),
+);
 
 function formatBytes(bytes?: number): string {
   if (!bytes) return "—";
@@ -183,11 +188,15 @@ export function AdminTab() {
 
   if (viewingFile) {
     return (
-      <PdfBookViewer
-        fileId={resolvePdfFileId(viewingFile)}
-        filename={resolvePdfFileName(viewingFile)}
-        onClose={() => setViewingFile(null)}
-      />
+      <Suspense
+        fallback={<PdfViewerPageLoading filename={resolvePdfFileName(viewingFile)} />}
+      >
+        <PdfBookViewer
+          fileId={resolvePdfFileId(viewingFile)}
+          filename={resolvePdfFileName(viewingFile)}
+          onClose={() => setViewingFile(null)}
+        />
+      </Suspense>
     );
   }
 

@@ -176,6 +176,16 @@ export function registerRoutes(router: ApiRouter, c: Container) {
         return json(await c.chatbotCommandService.sendMessage(dto));
     });
 
+    router.post("/chatbot/embeddings/:fileId", isAdmin, async (req) => {
+        const doc = c.library.find(req.params.fileId);
+        const pdf = doc && c.library.readPdf(doc.id);
+        if (!doc || !pdf) {
+            throw new BusinessException({ type: BusinessExceptionType.FILE_NOT_FOUND });
+        }
+        await c.fileCommandService.embedDocument(doc.filename, pdf);
+        return json({ message: `${doc.filename} was added to the RAG store.` });
+    });
+
     router.post("/chatbot/embedding", checkAuth, async (req) =>
         json(await c.chatbotCommandService.getEmbedding(req.body.text)),
     );

@@ -69,6 +69,7 @@ function createContainer() {
         store,
         path.join(BUNDLED_DATA_DIR, "documents"),
         path.join(RUNTIME_DATA_DIR, "uploads"),
+        path.join(process.cwd(), "public", "documents"),
     );
 
     const tokenUtil = new TokenUtil(config);
