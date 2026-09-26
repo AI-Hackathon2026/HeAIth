@@ -75,7 +75,10 @@ async function readText(pathname: string, ifNoneMatch?: string | null) {
     if (!result) return null;
     if (result.statusCode === 304) return { unchanged: true as const };
     const text = await new Response(result.stream).text();
-    return { unchanged: false as const, text, etag: result.blob.etag };
+    // Compressed responses carry a weak ETag (W/"…"), which never satisfies ifMatch.
+    // The underlying value is the blob's strong ETag, so strip the prefix.
+    const etag = result.blob.etag.replace(/^W\//, "");
+    return { unchanged: false as const, text, etag };
 }
 
 export class BlobDbStorage implements RemoteDbStorage {
